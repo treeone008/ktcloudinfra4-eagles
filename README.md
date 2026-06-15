@@ -2,8 +2,8 @@
 ktcloudinfra4-eagles
 
 ## 👥 역할 분담
-| 구분 | 담당자 |
-| :--- | :--- |
+| 구분 | 담당자 | 작업공간 |
+| :--- | :--- | :--- |
 | Linux/OpenStack | 김현도 | infra-openstack |
 | Ansible | 권건우 | ansible |
 | Docker Swarm | 박재윤 | docker-swarm |
