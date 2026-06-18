@@ -9,4 +9,4 @@ ktcloudinfra4-eagles
 | Docker Swarm | 박재윤 | docker-swarm |
 | Database | 김인태 | db |
 | Monitoring | 윤진수 | monitoring |
-| 문서화 | 최진성 |
+| 문서화 | 최진성 | documentation |
