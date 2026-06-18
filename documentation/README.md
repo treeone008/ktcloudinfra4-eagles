@@ -1,4 +1,5 @@
-openstack vm : 실습용 openstack1node (1) 에 sharednet1 network, ubuntu image 다운 후 진행
+openstack vm : 실습용 openstack1node (1) 에 sharednet1 network 구축, ubuntu image 다운 후 진행
+---
 
 
 openstack 위에서 
