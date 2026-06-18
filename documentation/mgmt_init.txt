@@ -1,0 +1,103 @@
+#!/bin/bash
+
+# Ubuntu 자동 업데이트 락(Lock) 대기 안전장치
+echo "Waiting for apt lock..."
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 2; done
+while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do sleep 2; done
+
+# 1. 패키지 업데이트 및 Ansible 설치
+apt-get update -y
+apt-get install -y software-properties-common jq
+add-apt-repository --yes --update ppa:ansible/ansible
+apt-get install -y ansible
+
+# 2. Ansible 작업 공간 및 새 확정 IP 인벤토리(hosts) 생성
+WORKDIR="/home/ubuntu/ansible-init"
+mkdir -p $WORKDIR
+
+cat << 'HOSTS' > $WORKDIR/hosts
+[master_node]
+master ansible_host=192.168.100.10 ansible_user=ubuntu
+
+[swarm_managers]
+swarm-mg ansible_host=192.168.100.20 ansible_user=ubuntu
+
+[swarm_workers]
+swarm-worker ansible_host=192.168.100.21 ansible_user=ubuntu
+
+# 모니터링 및 DB 등 기타 노드는 필요 시 아래 주석을 풀고 앤시블 제어권에 포함하세요
+# [monitoring]
+# monitor ansible_host=192.168.100.40 ansible_user=ubuntu
+# [databases]
+# db01 ansible_host=192.168.101.31 ansible_user=ubuntu
+# db02 ansible_host=192.168.101.32 ansible_user=ubuntu
+
+[all:vars]
+ansible_ssh_private_key_file=/home/ubuntu/.ssh/id_rsa
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+HOSTS
+
+# 3. Docker 설치 플레이북(docker_install.yml) 생성
+cat << 'PLAYBOOK' > $WORKDIR/docker_install.yml
+---
+- name: Install Docker on All Configured Nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt packages
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - gnupg
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker is running and enabled
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+PLAYBOOK
+
+# 소유권을 전면 ubuntu 유저로 변경
+chown -R ubuntu:ubuntu $WORKDIR
+
+# 외부(deploy_infra.sh)에서 id_rsa 배달 및 노드 부팅 시간 대기 (100초 여유 확보)
+sleep 100
+
+# 4. [핵심] 전체 확정 노드 앤시블 핑 테스트
+echo "Starting Ansible SSH Ping Test..." > $WORKDIR/ansible_ping.log
+su - ubuntu -c "ansible all -m ping -i $WORKDIR/hosts" >> $WORKDIR/ansible_ping.log 2>&1
+
+# 5. Docker 설치 플레이북 백그라운드 가동
+su - ubuntu -c "ansible-playbook -i $WORKDIR/hosts $WORKDIR/docker_install.yml" > $WORKDIR/ansible_run.log 2>&1
+
+echo "All Tasks Done!" > /var/log/project_init.log
