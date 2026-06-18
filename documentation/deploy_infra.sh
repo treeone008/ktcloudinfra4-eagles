@@ -3,10 +3,10 @@
 # 1. 초경량 가상 하드웨어 사양(Flavor) 생성
 echo "Creating Lightweight Flavors..."
 openstack flavor create --id 101 --ram 2048 --disk 15 --vcpus 1 m1.master
-openstack flavor create --id 102 --ram 2048 --disk 15 --vcpus 1 m1.swarm-mg
+#openstack flavor create --id 102 --ram 2048 --disk 15 --vcpus 1 m1.swarm-mg
 openstack flavor create --id 103 --ram 1024 --disk 10 --vcpus 1 m1.swarm-worker
-openstack flavor create --id 104 --ram 1024 --disk 10 --vcpus 1 m1.monitor
-openstack flavor create --id 105 --ram 1024 --disk 10 --vcpus 1 m1.db
+#openstack flavor create --id 104 --ram 1024 --disk 10 --vcpus 1 m1.monitor
+#openstack flavor create --id 105 --ram 1024 --disk 10 --vcpus 1 m1.db
 
 # 2. 투-트랙 네트워크 및 서브넷 구성 (100번 대역 & 101번 대역)
 echo "Creating Networks and Subnets..."
@@ -54,13 +54,13 @@ echo "Launching VM Instances..."
 # master (기존 앤시블 관리 기능을 겸함)
 openstack server create --flavor m1.master --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.10 --key-name my-key --security-group project-sg --user-data mgmt_init.txt master
 
-openstack server create --flavor m1.swarm-mg --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.20 --key-name my-key --security-group project-sg swarm-mg
+#openstack server create --flavor m1.swarm-mg --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.20 --key-name my-key --security-group project-sg swarm-mg
 openstack server create --flavor m1.swarm-worker --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.21 --key-name my-key --security-group project-sg swarm-worker
-openstack server create --flavor m1.monitor --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.40 --key-name my-key --security-group project-sg monitor
+#openstack server create --flavor m1.monitor --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.100.40 --key-name my-key --security-group project-sg monitor
 
 # [101번 대역 배치 노드들]
-openstack server create --flavor m1.db --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.101.31 --key-name my-key --security-group project-sg db01
-openstack server create --flavor m1.db --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.101.32 --key-name my-key --security-group project-sg db02
+#openstack server create --flavor m1.db --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.101.31 --key-name my-key --security-group project-sg db01
+#openstack server create --flavor m1.db --image $IMAGE_NAME --nic net-id=$NET_ID,v4-fixed-ip=192.168.101.32 --key-name my-key --security-group project-sg db02
 
 # 7. 외부 접속을 위한 Floating IP 생성 및 master 서버 연결
 echo "Allocating Floating IP to Master node..."
@@ -71,7 +71,7 @@ openstack server add floating ip master $FLOATING_IP
 # 인증용 마스터 개인키를 master 노드로 원격 배달
 # =============================================================
 echo "Waiting for Master node SSH to wake up..."
-sleep 60 
+sleep 120 
 
 echo "Injecting Private Key into Master node..."
 scp -o StrictHostKeyChecking=no -i my-key.pem my-key.pem ubuntu@$FLOATING_IP:/home/ubuntu/.ssh/id_rsa

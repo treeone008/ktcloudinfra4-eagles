@@ -19,8 +19,8 @@ cat << 'HOSTS' > $WORKDIR/hosts
 [master_node]
 master ansible_host=192.168.100.10 ansible_user=ubuntu
 
-[swarm_managers]
-swarm-mg ansible_host=192.168.100.20 ansible_user=ubuntu
+#[swarm_managers]
+#swarm-mg ansible_host=192.168.100.20 ansible_user=ubuntu
 
 [swarm_workers]
 swarm-worker ansible_host=192.168.100.21 ansible_user=ubuntu
@@ -85,6 +85,170 @@ cat << 'PLAYBOOK' > $WORKDIR/docker_install.yml
         name: ubuntu
         groups: docker
         append: yes
+
+
+# [Play 2] Docker Swarm 클러스터 자동 구축 자동화 파트
+# =============================================================
+- name: Initialize Docker Swarm on Master
+  hosts: master_node
+  become: yes
+  tasks:
+    - name: Check if Docker Swarm is already initialized
+      command: docker info --format '{{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}'
+      register: swarm_status
+      changed_when: false
+
+    - name: Initialize Docker Swarm
+      command: docker swarm init --advertise-addr 192.168.100.10
+      when: swarm_status.stdout == "inactive"
+
+    - name: Get Swarm Worker Join Token
+      command: docker swarm join-token -q worker
+      register: worker_token
+      changed_when: false
+
+
+# [Play 3] Worker 노드들을 마스터 스웜 클러스터에 조인 
+# =============================================================
+- name: Join Workers to the Swarm Cluster
+  hosts: swarm_workers
+  become: yes
+  tasks:
+    - name: Check if Worker is already in a Swarm
+      command: docker info --format '{{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}'
+      register: worker_swarm_status
+      changed_when: false
+
+    - name: Join Swarm Cluster as Worker
+      command: "docker swarm join --token {{ hostvars['master']['worker_token']['stdout'] }} 192.168.100.10:2377"
+      when: worker_swarm_status.stdout == "inactive"
+      ignore_errors: yes
+
+
+# [Play 4] Master 노드에서 Workcer에 Nginx 컨테이너 서비스 자동 배포
+# =============================================================
+- name: Deploy Default Web Service on Swarm
+  hosts: master_node
+  become: yes
+  tasks:
+    - name: Check if routing-test service already exists
+      command: docker service ls --filter name=routing-test -q
+      register: service_exists
+      changed_when: false
+
+    - name: Deploy Nginx onto Worker Node automatically
+      command: >
+        docker service create 
+        --name routing-test 
+        --replicas 1 
+        --constraint 'node.role == worker' 
+        --publish published=80,target=80 
+        nginx
+      when: service_exists.stdout == ""
+
+
+# [Play 5] 전 노드 초경량 모니터링 에이전트(Node Exporter) 빌드
+# =============================================================
+- name: Deploy Node Exporter on All Nodes
+  hosts: all
+  become: yes
+  tasks:
+    - name: Download Node Exporter archive safely
+      get_url:
+        url: https://github.com/prometheus/node_exporter/releases/download/v1.8.0/node_exporter-1.8.0.linux-amd64.tar.gz
+        dest: /tmp/node_exporter.tar.gz
+        mode: '0644'
+
+    - name: Ensure target bin directory exists
+      file:
+        path: /usr/local/bin
+        state: directory
+
+    - name: Unarchive Node Exporter to temporary folder
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Copy and set executable permission for Node Exporter binary
+      copy:
+        src: /tmp/node_exporter-1.8.0.linux-amd64/node_exporter
+        dest: /usr/local/bin/node_exporter
+        mode: '0755'
+        remote_src: yes
+
+    - name: Create Systemd Service File with Block Syntax (Safe from breaks)
+      blockinfile:
+        path: /etc/systemd/system/node_exporter.service
+        create: yes
+        mode: '0644'
+        block: |
+          [Unit]
+          Description=Node Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/usr/local/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Force systemd daemon-reload and restart node_exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+
+# [Play 6] Master 노드에 프로메테우스 및 그라파나 서버 구동
+# =============================================================
+- name: Setup Prometheus and Grafana Server on Master
+  hosts: master_node
+  become: yes
+  tasks:
+    - name: Create Prometheus config directory
+      file:
+        path: /etc/prometheus
+        state: directory
+        mode: '0755'
+
+    - name: Generate prometheus.yml config with Block Syntax
+      blockinfile:
+        path: /etc/prometheus/prometheus.yml
+        create: yes
+        mode: '0644'
+        block: |
+          global:
+            scrape_interval: 5s
+
+          scrape_configs:
+            - job_name: 'openstack-swarm-cluster'
+              static_configs:
+                - targets: ['192.168.100.10:9100']
+                - targets: ['192.168.100.21:9100']
+
+    - name: Launch Prometheus Docker Container
+      docker_container:
+        name: prometheus
+        image: prom/prometheus:latest
+        state: started
+        restart_policy: always
+        published_ports:
+          - "9090:9090"
+        volumes:
+          - /etc/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+    - name: Launch Grafana Docker Container
+      docker_container:
+        name: grafana
+        image: grafana/grafana:latest
+        state: started
+        restart_policy: always
+        published_ports:
+          - "3000:3000"
 PLAYBOOK
 
 # 소유권을 전면 ubuntu 유저로 변경
