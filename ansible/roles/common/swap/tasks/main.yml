@@ -1,0 +1,10 @@
+---
+- name: 컨테이너 성능 안정화를 위한 스왑 메모리 임시 비활성화
+  command: swapoff -a
+  changed_when: false
+
+- name: /etc/fstab 파일에서 스왑 메모리 영구 주석 처리
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+.*)$'
+    replace: '# \1'

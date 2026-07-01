@@ -1,0 +1,84 @@
+---
+# ====================================================================
+# [STEP 0] 공통 기초 인프라 설정 (3대 노드 전체 동시 적용)
+# ====================================================================
+- name: Apply common infrastructure settings
+  hosts: swarm_cluster
+  become: true
+  tags: [common, swarm_setup]
+  roles:
+    - role: common/packages
+    - role: common/timezone
+    - role: common/firewall
+    - role: common/swap
+    - role: common/hosts
+
+# ====================================================================
+# [STEP 1] 도커 엔진 전체 설치 (3대 노드 전체 동시 적용)
+# ====================================================================
+- name: Install Docker Engine
+  hosts: swarm_cluster
+  become: true
+  tags: [docker, swarm_setup]
+  roles:
+    - role: swarm/docker
+
+# ====================================================================
+# [STEP 2] 메인 매니저(Leader)에서 도커 스웜 최초 초기화
+# ====================================================================
+- name: Initialize Docker Swarm on leader
+  hosts: swarm_manager_leader
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/init
+
+# ====================================================================
+# [STEP 3] 나머지 노드들을 추가 매니저로 클러스터에 조인
+# ====================================================================
+- name: Join other nodes as managers
+  hosts: swarm_manager_nodes
+  become: true
+  tags: [swarm_join, swarm_setup]
+  roles:
+    - role: swarm/join
+
+# ====================================================================
+# [STEP 4] 매니저 노드 관리 레이블 설정
+# ====================================================================
+- name: Set node labels
+  hosts: swarm_manager_leader
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/labels
+
+# ====================================================================
+# [STEP 5] 컨테이너 스택 배포
+# ====================================================================
+- name: Deploy container stack
+  hosts: swarm_manager_leader
+  become: true
+  tags: [swarm_deploy, swarm_setup]
+  roles:
+    - role: swarm/deploy
+
+# ====================================================================
+# [STEP 6] 롤링 업데이트 (수동 트리거용)
+# ====================================================================
+- name: Perform rolling update
+  hosts: swarm_manager_leader
+  become: true
+  tags: swarm_update
+  roles:
+    - role: swarm/update
+
+# ====================================================================
+# [STEP 7] 서비스 롤백 (수동 트리거용)
+# ====================================================================
+- name: Perform service rollback
+  hosts: swarm_manager_leader
+  become: true
+  tags: swarm_rollback
+  roles:
+    - role: swarm/rollback
