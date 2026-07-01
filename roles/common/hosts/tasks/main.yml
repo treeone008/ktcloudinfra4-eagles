@@ -1,8 +1,0 @@
----
-- name: /etc/hosts 파일에 클러스터 노드들의 IP-호스트네임 매핑 추가
-  blockinfile:
-    path: /etc/hosts
-    block: |
-      192.168.100.20 swarm-mg
-      192.168.100.21 swarm-mg2
-      192.168.100.22 swarm-mg3
