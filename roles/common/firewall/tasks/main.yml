@@ -1,0 +1,4 @@
+---
+- name: 보안 및 노드 통신을 위한 우분투 방화벽(UFW) 비활성화
+  ufw:
+    state: disabled
