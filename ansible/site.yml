@@ -1,0 +1,49 @@
+---
+- name: Install Docker
+  hosts: swarm_managers
+  become: true
+  tags: [docker, swarm_setup]
+  roles:
+    - role: swarm/docker
+
+- name: Init Swarm on leader
+  hosts: swarm-mg
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/init
+
+- name: Join other managers
+  hosts: swarm-mg2,swarm-mg3
+  become: true
+  tags: swarm_join, swarm_setup
+  roles:
+    - role: swarm/join
+
+- name: Set node labels
+  hosts: swarm-mg
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/labels
+
+- name: Deploy stack
+  hosts: swarm-mg
+  become: true
+  tags: [swarm_deploy, swarm_setup]
+  roles:
+    - role: swarm/deploy
+
+- name: Rolling update
+  hosts: swarm-mg
+  become: true
+  tags: swarm_update
+  roles:
+    - role: swarm/update
+
+- name: Rollback
+  hosts: swarm-mg
+  become: true
+  tags: swarm_rollback
+  roles:
+    - role: swarm/rollback
