@@ -1,0 +1,8 @@
+---
+- name: MySQLD Exporter 서비스를 부팅 시 자동 시작되도록 활성화 (실패해도 진행)
+  systemd:
+    name: prometheus-mysqld-exporter
+    enabled: yes
+    state: started
+  # 아직 MariaDB가 설치되지 않아 발생하는 상시 가동 실패 에러를 안전하게 넘깁니다.
+  ignore_errors: yes

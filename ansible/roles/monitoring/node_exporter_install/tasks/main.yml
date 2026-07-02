@@ -1,0 +1,6 @@
+---
+- name: 우분투 공식 레포지토리를 통해 Prometheus Node Exporter 패키지 설치
+  apt:
+    name: prometheus-node-exporter
+    state: present
+    update_cache: yes
