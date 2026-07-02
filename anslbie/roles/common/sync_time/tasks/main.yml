@@ -1,0 +1,6 @@
+---
+- name: 시스템 시간 동기화를 위한 systemd-timesyncd 활성화
+  systemd:
+    name: systemd-timesyncd
+    state: started
+    enabled: yes

@@ -1,0 +1,4 @@
+---
+- name: 호스트 OS 시스템 패키지 일괄 업그레이드 (apt upgrade)
+  apt:
+    upgrade: dist
