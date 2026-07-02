@@ -1,6 +1,0 @@
-db_password: "{{ vault_db_password }}"
-db_user: "{{ vault_db_user }}"
-db_name: "{{ vault_db_name }}"
-db_primary_host: "{{ vault_db_primary_host }}"
-db_primary_port: "{{ vault_db_primary_port }}"
-db_type: "{{ vault_db_type }}"

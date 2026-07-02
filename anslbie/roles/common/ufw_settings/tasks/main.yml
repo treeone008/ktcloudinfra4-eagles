@@ -1,4 +1,0 @@
----
-- name: Docker Swarm 및 DB 간 원활한 통신을 위해 UFW 방화벽 비활성화
-  ufw:
-    state: disabled

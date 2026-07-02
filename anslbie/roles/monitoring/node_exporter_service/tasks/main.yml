@@ -1,6 +1,0 @@
----
-- name: Node Exporter 서비스 백그라운드 상시 가동 및 활성화
-  systemd:
-    name: prometheus-node-exporter
-    state: started
-    enabled: yes
