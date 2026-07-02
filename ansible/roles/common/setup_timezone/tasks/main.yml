@@ -1,0 +1,4 @@
+---
+- name: 모든 노드의 타임존을 서울(KST)로 변경
+  timezone:
+    name: Asia/Seoul

@@ -1,0 +1,7 @@
+- name: Get service name
+  shell: docker service ls --format '{{ "{{" }}.Name{{ "}}" }} {{ "{{" }}.Image{{ "}}" }}' | grep "{{ image_repo }}" | awk '{print $1}'
+  register: service_name
+
+- name: Rollback service
+  shell: docker service rollback {{ service_name.stdout }}
+

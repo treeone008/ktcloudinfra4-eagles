@@ -1,0 +1,19 @@
+- name: Set node labels
+  block:
+    - name: Label leader
+      shell: docker node update --label-add role=leader {{ hostvars['swarm-mg']['swarm_node_name'] }}
+
+    - name: Label swarm-mg2 as was
+      shell: docker node update --label-add role=was {{ hostvars['swarm-mg2']['swarm_node_name'] }}
+
+    - name: Label swarm-mg3 as was
+      shell: docker node update --label-add role=was {{ hostvars['swarm-mg3']['swarm_node_name'] }}
+
+  rescue:
+    - name: Remove labels on failure
+      shell: |
+        docker node update --label-rm role {{ hostvars['swarm-mg']['swarm_node_name'] }}
+        docker node update --label-rm role {{ hostvars['swarm-mg2']['swarm_node_name'] }}
+        docker node update --label-rm role {{ hostvars['swarm-mg3']['swarm_node_name'] }}
+      ignore_errors: yes
+
