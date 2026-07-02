@@ -1,4 +1,0 @@
----
-- name: 패키지 매니저 캐시 업데이트 (apt update)
-  apt:
-    update_cache: yes

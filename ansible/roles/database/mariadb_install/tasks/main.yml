@@ -1,6 +1,0 @@
----
-- name: MariaDB 서버 관련 패키지 자동 설치 (apt)
-  apt:
-    name: mariadb-server
-    state: present
-    update_cache: yes
