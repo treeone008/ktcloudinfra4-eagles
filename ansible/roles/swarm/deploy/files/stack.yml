@@ -9,6 +9,13 @@ services:
     environment:
       PORT: 3000
       HOST: 0.0.0.0
+      # 💡 [필수 추가] Ansible이 주입한 Secret 파일들을 웹 소스코드가 읽을 수 있도록 환경변수 경로를 연결합니다.
+      DB_TYPE_FILE: /run/secrets/db_type
+      DB_HOST_FILE: /run/secrets/db_primary_host
+      DB_PORT_FILE: /run/secrets/db_primary_port
+      DB_USER_FILE: /run/secrets/db_user
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      DB_NAME_FILE: /run/secrets/db_name
     secrets:
       - source: db_type
         mode: 0440
@@ -60,11 +67,12 @@ services:
         reservations:
           memory: 128M
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      # 💡 [안정성 패치] wget 대신 curl을 쓰거나, /health 경로가 없다면 루트 경로(/)를 찌르도록 변경해야 안전합니다.
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     logging:
       driver: json-file
       options:
@@ -85,4 +93,3 @@ secrets:
     external: true
   db_replica_hosts:
     external: true
-
