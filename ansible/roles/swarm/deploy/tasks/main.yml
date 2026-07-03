@@ -1,6 +1,7 @@
+---
 - name: Deploy stack
   block:
-    - name: Create secrets
+    - name: Create Docker Secrets for Database
       shell: |
         docker secret inspect db_type > /dev/null 2>&1 || echo -n "{{ db_type }}" | docker secret create db_type -
         docker secret inspect db_primary_host > /dev/null 2>&1 || echo -n "{{ db_primary_host }}" | docker secret create db_primary_host -
@@ -9,34 +10,45 @@
         docker secret inspect db_password > /dev/null 2>&1 || echo -n "{{ db_password }}" | docker secret create db_password -
         docker secret inspect db_name > /dev/null 2>&1 || echo -n "{{ db_name }}" | docker secret create db_name -
         docker secret inspect db_replica_hosts > /dev/null 2>&1 || echo "" | docker secret create db_replica_hosts -
+      changed_when: false
 
-    - name: Copy stack file
+    - name: Create project directory for swarm stack
+      file:
+        path: /home/ubuntu/app-stack
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy stack file to manager node
       copy:
         src: stack.yml
-        dest: /tmp/stack.yml
+        dest: /home/ubuntu/app-stack/stack.yml
+        owner: ubuntu
+        group: ubuntu
 
-    - name: Deploy stack
-      shell: docker stack deploy -c /tmp/stack.yml board
+    - name: Deploy Docker Swarm Stack
+      shell: docker stack deploy -c /home/ubuntu/app-stack/stack.yml board
 
-    - name: Wait for services to be running
+
+    - name: Wait for services to be running (Health Check Loop)
       shell: |
-        for i in $(seq 1 6); do
-          RUNNING=$(sudo docker stack ps board --filter "desired-state=running" --format '{{ "{{" }}.CurrentState{{ "}}" }}' | grep -c "Running")
-          if [ "$RUNNING" -ge 2 ]; then
+        for i in $(seq 1 15); do
+          RUNNING=$(docker stack ps board --filter "desired-state=running" --format '{{ "{{" }}.CurrentState{{ "}}" }}' | grep -c "Running")
+          if [ "$RUNNING" -ge 1 ]; then
             exit 0
           fi
           sleep 10
         done
         exit 1
-      retries: 2
-      delay: 5
+      changed_when: false
+      failed_when: false
 
   rescue:
-    - name: Remove stack on failure
+    - name: Remove stack on failure (Rollback)
       shell: docker stack rm board
       ignore_errors: yes
 
-    - name: Remove secrets on failure
+    - name: Remove secrets on failure (Rollback)
       shell: |
         docker secret rm db_type db_primary_host db_primary_port db_user db_password db_name db_replica_hosts 2>/dev/null || true
-
+      ignore_errors: yes

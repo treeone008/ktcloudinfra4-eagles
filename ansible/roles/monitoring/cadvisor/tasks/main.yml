@@ -1,5 +1,13 @@
 ---
-- name: Docker Swarm 글로벌 서비스를 이용해 모든 Swarm 노드에 cAdvisor 컨테이너 배포
+- name: Check if cAdvisor service already exists
+  shell: docker service inspect cadvisor
+  register: cadvisor_check
+  failed_when: false
+  changed_when: false
+  # 💡 오직 swarm-mg(리더)에서만 실행되도록 강제 위임
+  delegate_to: swarm-mg
+
+- name: Deploy cAdvisor Global Service on Swarm Cluster
   shell: |
     docker service create \
       --name cadvisor \
@@ -11,7 +19,6 @@
       --mount type=bind,src=/dev/disk/,dst=/dev/disk,ro \
       --publish published=8080,target=8080,mode=host \
       google/cadvisor:latest
-  args:
-    # 이미 서비스가 띄워져 있다면 중복 에러가 나지 않도록 예외 처리
-    removes: /var/run/docker.sock
-  failed_when: false
+  when: cadvisor_check.rc != 0  # 💡 서비스가 없을 때만 최초 1회 실행
+  delegate_to: swarm-mg         # 💡 오직 swarm-mg(리더)에서만 실행되도록 강제 위임
+

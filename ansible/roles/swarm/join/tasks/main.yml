@@ -1,19 +1,19 @@
 - name: Swarm join
   block:
     - name: Check swarm state
-      shell: sudo docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
+      shell: docker info --format '{{ "{{" }}.Swarm.LocalNodeState{{ "}}" }}'
       register: swarm_state
       changed_when: false
 
     - name: Join swarm as manager
-      shell: docker swarm join --token {{ hostvars['swarm-mg']['swarm_manager_token'] }} {{ hostvars['swarm-mg']['ansible_host'] }}:2377
+      shell: "docker swarm join --token {{ hostvars['swarm-mg']['swarm_manager_token'] }} {{ hostvars['swarm-mg']['ansible_host'] }}:2377"
       when: swarm_state.stdout != "active"
 
   rescue:
-    - name: Leave swarm on failure
-      shell: sudo docker swarm leave --force
+    - name: Leave swarm on failure (Rollback)
+      shell: docker swarm leave --force
       ignore_errors: yes
 
-    - name: Retry join swarm
-      shell: docker swarm join --token {{ hostvars['swarm-mg']['swarm_manager_token'] }} {{ hostvars['swarm-mg']['ansible_host'] }}:2377
-
+    - name: Fail with custom message
+      fail:
+        msg: "Swarm 클러스터 조인에 실패했습니다. 토큰 값이나 2377 포트 방화벽을 확인하세요."

@@ -1,19 +1,23 @@
+---
 - name: Set node labels
   block:
-    - name: Label leader
-      shell: docker node update --label-add role=leader {{ hostvars['swarm-mg']['swarm_node_name'] }}
+    - name: Label leader node
+      shell: docker node update --label-add role=leader swarm-mg
 
     - name: Label swarm-mg2 as was
-      shell: docker node update --label-add role=was {{ hostvars['swarm-mg2']['swarm_node_name'] }}
+      shell: docker node update --label-add role=was swarm-mg02
 
     - name: Label swarm-mg3 as was
-      shell: docker node update --label-add role=was {{ hostvars['swarm-mg3']['swarm_node_name'] }}
+      shell: docker node update --label-add role=was swarm-mg03
 
   rescue:
-    - name: Remove labels on failure
+    - name: Remove labels on failure (Rollback)
       shell: |
-        docker node update --label-rm role {{ hostvars['swarm-mg']['swarm_node_name'] }}
-        docker node update --label-rm role {{ hostvars['swarm-mg2']['swarm_node_name'] }}
-        docker node update --label-rm role {{ hostvars['swarm-mg3']['swarm_node_name'] }}
+        docker node update --label-rm role swarm-mg 2>/dev/null || true
+        docker node update --label-rm role swarm-mg02 2>/dev/null || true
+        docker node update --label-rm role swarm-mg03 2>/dev/null || true
       ignore_errors: yes
 
+    - name: Fail with clear message
+      fail:
+        msg: "노드 라벨링(Tagging) 과정에서 에러가 발생했습니다. 클러스터 상태를 점검하세요."
