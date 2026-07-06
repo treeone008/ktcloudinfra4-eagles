@@ -2,7 +2,23 @@
 
 > **목적:** VMware + Kolla-Ansible 기반 **멀티노드 OpenStack** 환경을 설계·구축·검증한 결과를 정리한다.  
 > **검증 일시:** 2026-07-06 · tenant VM **10/10 ACTIVE**  
-> **캡처:** `[캡처 삽입]` 표시 위치에 스크린샷을 붙여 발표 슬라이드로 사용한다.
+> **캡처:** `images/captures/` — Notion·발표 슬라이드용 (**13장**, 2026-07-06 촬영)
+
+---
+
+## 0. 발표 슬라이드 권장 순서 (캡처 배치)
+
+| 슬라이드 | 제목 | 이미지 |
+|:--------:|------|--------|
+| 1 | 한 줄 요약 + 아키텍처 | §2 다이어그램 + `01` |
+| 2 | 인프라·Horizon | `02`, `03` |
+| 3 | 네트워크 토폴로지 | `04`, `07` |
+| 4 | **핵심 증명** — tenant 10대 | `06` |
+| 5 | Compute 3분산 | `05` |
+| 6 | anti-affinity · FIP · Cinder | `09`, `10`, `11` |
+| 7 | Neutron · SG | `08`, `12` |
+| 8 | mgmt 설계 (구두) | §11 다이어그램 |
+| 9 | 실시연 vs 본 구축 | §14 표 |
 
 ---
 
@@ -13,6 +29,7 @@
 | 플랫폼 | VMware Workstation Pro + Ubuntu 24.04 + Kolla-Ansible 2025.1 |
 | 구성 | 인프라 **7노드** (mgmt + control / network / storage / compute×3) + tenant **10대** |
 | 핵심 | 멀티 compute 분산, anti-affinity, public/private 이중망, FIP, Cinder, **mgmt 설계** |
+| 검증 | Horizon + OpenStack CLI 캡처 **13장** (`images/captures/`) |
 | 실시연 | 강사 PC **mgmt+올인원 2VM**, Swarm **원노드** (본 문서는 **구축 증명**용) |
 
 ---
@@ -35,255 +52,195 @@ Tenant (OpenStack 인스턴스 10대)
 └─ compute-03: swarm-mg3, automation-01
 ```
 
-**[캡처 삽입]** VMware 라이브러리 — **mgmt 포함** 인프라 VM 전원 ON 화면
+![VMware 라이브러리 — 7노드 전원 ON (mgmt 포함)](images/captures/01-vmware-library-7nodes.png)
 
 ---
 
-## 3. 인프라 노드
+## 3. 인프라 노드 · Horizon
 
-| 노드 | IP | 역할 | RAM (문서 기준) |
-|------|-----|------|-----------------|
-| **mgmt-01** | **172.16.8.200** | **외부 관리 / Ansible / SSH 진입점** | 8GB |
-| control | 172.16.8.100 | Controller, Nova API/Conductor/Scheduler | 6GB |
-| network | 172.16.8.101 | Neutron (L3, DHCP, OVS, Metadata) | 2GB |
-| storage | 172.16.8.102 | Cinder Volume (LVM) | 3GB |
-| compute-node-01 | 172.16.8.103 | Nova Compute | 6GB |
-| compute-node-02 | 172.16.8.104 | Nova Compute | 8GB |
-| compute-node-03 | 172.16.8.106 | Nova Compute | ≈6GB |
-| VIP / Horizon | 172.16.8.105 | 웹 콘솔 | — |
+| 노드 | IP | 역할 |
+|------|-----|------|
+| **mgmt-01** | **172.16.8.200** | 외부 관리 / Ansible / SSH 진입점 |
+| control | 172.16.8.100 | Controller + API |
+| network | 172.16.8.101 | Neutron |
+| storage | 172.16.8.102 | Cinder LVM |
+| compute×3 | .103 / .104 / .106 | Nova Compute |
+| Horizon VIP | 172.16.8.105 | `http://172.16.8.105` |
 
-- 배포 도구: **Kolla-Ansible** (`/etc/kolla/multinode`)
-- OS: Ubuntu 24.04 Server
-- Horizon: `http://172.16.8.105`
+**Horizon 쿼터 (2026-07-06 실측):** Instances **10/10 (100%)** · VCPU 10/20 · RAM 12GB/50GB · Volume 2/10 · FIP 2/50
 
-**[캡처 삽입]** Horizon 로그인 / 대시보드 Overview
+![Horizon Overview — Limit Summary](images/captures/02-horizon-overview-quota.png)
+
+![Horizon Usage Summary — 10 ACTIVE, RAM 12GB](images/captures/03-horizon-usage-summary.png)
 
 ---
 
 ## 4. 네트워크 설계
 
-| 구분 | 이름 | CIDR | 용도 |
-|------|------|------|------|
-| External | `public1` | 172.16.8.0/24 | FIP 풀 (.201~.250) |
-| Tenant Public | `project-public-net` | 192.168.100.0/24 | 웹·Swarm·LB 등 |
-| Tenant Private | `project-private-net` | 192.168.101.0/24 | DB·Proxy (사설 전용) |
-| Router | `project-router` | — | public1 ↔ tenant subnets |
+| 구분 | 이름 | CIDR |
+|------|------|------|
+| External | `public1` | 172.16.8.0/24 |
+| Tenant Public | `project-public-net` | 192.168.100.0/24 |
+| Tenant Private | `project-private-net` | 192.168.101.0/24 |
+| Router | `project-router` | public1 ↔ tenant |
 
 **망 규칙:** `192.168.100.x` = public · `192.168.101.x` = private
 
-**[캡처 삽입]** `openstack network list` + `openstack subnet list`  
-**[캡처 삽입]** `openstack network agent list` (L3/DHCP/OVS 전부 UP)
+![Horizon Network Topology](images/captures/04-horizon-network-topology.png)
+
+![openstack network list + subnet list](images/captures/07-cli-network-subnet-list.png)
+
+![openstack network agent list — L3/DHCP/OVS UP](images/captures/08-cli-network-agent-list.png)
 
 ---
 
-## 5. Tenant VM 목록 (검증 완료 2026-07-06)
+## 5. Tenant VM 목록 (검증 완료)
 
-| 이름 | Fixed IP | FIP | Compute | Flavor | 상태 |
-|------|----------|-----|---------|--------|:----:|
-| swarm-mg | 192.168.100.20 | 172.16.8.219 | compute-01 | m1.small | ACTIVE |
-| swarm-mg2 | 192.168.100.21 | 172.16.8.243 | compute-02 | m1.swarm | ACTIVE |
-| swarm-mg3 | 192.168.100.22 | — | compute-03 | m1.micro | ACTIVE |
-| db01 | 192.168.101.31 | — | compute-01 | m1.micro | ACTIVE |
-| db02 | 192.168.101.32 | — | compute-02 | m1.micro | ACTIVE |
-| db_proxy-01 | 192.168.101.40 | — | compute-01 | m1.micro | ACTIVE |
-| db_proxy-02 | 192.168.101.41 | — | compute-02 | m1.micro | ACTIVE |
-| lb-01 | 192.168.100.50 | — | compute-01 | m1.micro | ACTIVE |
-| lb-02 | 192.168.100.51 | — | compute-02 | m1.micro | ACTIVE |
-| automation-01 | 192.168.100.60 | — | compute-03 | m1.micro | ACTIVE |
+| 이름 | Fixed IP | FIP | Flavor | 상태 |
+|------|----------|-----|--------|:----:|
+| swarm-mg | .100.20 | .219 | m1.small | ACTIVE |
+| swarm-mg2 | .100.21 | .243 | m1.swarm | ACTIVE |
+| swarm-mg3 | .100.22 | — | m1.micro | ACTIVE |
+| db01 | .101.31 | — | m1.micro | ACTIVE |
+| db02 | .101.32 | — | m1.micro | ACTIVE |
+| db_proxy-01/02 | .101.40/41 | — | m1.micro | ACTIVE |
+| lb-01/02 | .100.50/51 | — | m1.micro | ACTIVE |
+| automation-01 | .100.60 | — | m1.micro | ACTIVE |
 
-**[캡처 삽입]** `openstack server list` — **10/10 ACTIVE** (핵심 증명)
+![openstack server list — 10/10 ACTIVE (핵심 증명)](images/captures/06-cli-server-list-10active.png)
 
 ---
 
-## 6. Compute 분산 배치
+## 6. Compute 분산
 
 ```
-compute-node-01 (.103)     compute-node-02 (.104)     compute-node-03 (.106)
-├─ swarm-mg                ├─ swarm-mg2               ├─ swarm-mg3
-├─ db01                    ├─ db02                    └─ automation-01
-├─ db_proxy-01             ├─ db_proxy-02
-└─ lb-01                   └─ lb-02
+compute-01 (.103)     compute-02 (.104)     compute-03 (.106)
+├─ swarm-mg           ├─ swarm-mg2          ├─ swarm-mg3
+├─ db01               ├─ db02                └─ automation-01
+├─ db_proxy-01        ├─ db_proxy-02
+└─ lb-01              └─ lb-02
 ```
 
-- **Swarm 매니저 3대** → compute 01 / 02 / 03 **각 1대씩 분산**
-- **DB Primary/Replica** → 서로 다른 compute (anti-affinity)
-
-**[캡처 삽입]** `openstack compute service list` — nova-compute 3대 **up**  
-**[캡처 삽입]** (선택) Horizon → Admin → System → Hypervisors
+![openstack compute service list — nova-compute 3대 up](images/captures/05-cli-compute-service-list.png)
 
 ---
 
 ## 7. Anti-Affinity Server Group
 
-| Server Group | 정책 | 멤버 | 검증 |
-|--------------|------|------|------|
-| `db-server-group` | anti-affinity | db01, db02 | compute-01 ↔ compute-02 |
-| `swarm-server-group` | anti-affinity | swarm-mg, mg2, mg3 | compute 01 / 02 / 03 |
+| Server Group | 정책 |
+|--------------|------|
+| `db-server-group` | anti-affinity (db01, db02) |
+| `swarm-server-group` | anti-affinity (swarm-mg, mg2, mg3) |
 
-**[캡처 삽입]** `openstack server group list` + show (멤버 확인)
+![openstack server group list](images/captures/09-cli-server-group-list.png)
 
 ---
 
 ## 8. Floating IP
 
-| FIP | Fixed IP | VM | 용도 |
-|-----|----------|-----|------|
-| 172.16.8.219 | 192.168.100.20 | swarm-mg | 외부 SSH bastion |
-| 172.16.8.243 | 192.168.100.21 | swarm-mg2 | 외부 SSH |
+| FIP | Fixed IP | VM |
+|-----|----------|-----|
+| 172.16.8.219 | 192.168.100.20 | swarm-mg |
+| 172.16.8.243 | 192.168.100.21 | swarm-mg2 |
 
-**[캡처 삽입]** `openstack floating ip list`
-
----
-
-## 9. Cinder 볼륨 (DB 영속 스토리지)
-
-| 볼륨 | 크기 | 연결 VM | Device | 상태 |
-|------|------|---------|--------|:----:|
-| db01-data | 10GB | db01 | /dev/vdb | in-use |
-| db02-data | 10GB | db02 | /dev/vdb | in-use |
-
-- Cinder 백엔드: storage 노드 LVM (`cinder-volume @ storage@lvm-1`)
-
-**[캡처 삽입]** `openstack volume list`  
-**[캡처 삽입]** `openstack volume service list` (cinder-volume **up**)
-
-> **운영 참고:** DB VM은 Cinder 볼륨 연결이 있어 재부팅 시 **storage → compute** 순서로 기동해야 한다.  
-> ERROR 시 `openstack server reboot --hard` 또는 `reset-state --active` 후 `start`.
+![openstack floating ip list](images/captures/10-cli-floating-ip-list.png)
 
 ---
 
-## 10. Security Group (`project-sg`)
+## 9. Cinder 볼륨
 
-| Protocol | Port | 용도 |
-|----------|------|------|
-| icmp | — | ping |
-| tcp | 22 | SSH |
-| tcp | 80 / 443 | HTTP/S |
-| tcp | 2377 | Swarm |
-| tcp/udp | 7946 | Swarm |
-| udp | 4789 | overlay |
-| tcp | 3306 | MariaDB |
-| tcp | 9090 / 3000 | Prometheus / Grafana |
+| 볼륨 | 크기 | VM | 상태 |
+|------|------|-----|:----:|
+| db01-data | 10GB | db01 `/dev/vdb` | in-use |
+| db02-data | 10GB | db02 `/dev/vdb` | in-use |
 
-**[캡처 삽입]** Horizon → Network → Security Groups → project-sg Rules
+- `cinder-volume @ storage@lvm-1` — **up**
+- `cinder-backup` — down (미사용, 발표 무관)
+
+![openstack volume list + volume service list](images/captures/11-cli-volume-and-service.png)
 
 ---
 
-## 11. mgmt 노드 & SSH (설계·구현 — 발표는 개념 위주)
+## 10. Security Group
 
-> **발표:** mgmt VM 존재 + SSH **설계(ProxyJump)** 를 슬라이드·구두로 설명.  
-> **라이브 SSH 데모·캡처 증명은 생략** (환경에 따라 지연·불안정). tenant 접속은 control + `project_key`로 검증.
-
-### 11-1. mgmt-01 개요
-
-| 항목 | 값 |
+| 이름 | ID |
 |------|-----|
-| VMware VM | **mgmt-01** |
-| IP | **172.16.8.200** |
-| OS | Ubuntu 24.04 Server |
-| 역할 | OpenStack **외부 관리** / Ansible / SSH **진입점** (강사 PC 실시연에도 동일 역할) |
-| 키 | control `project_key` 개인키 → mgmt `~/.ssh/id_rsa` 복사 |
+| `project-sg` | `7363bb1e-2d20-4243-89c4-b74af7419853` |
 
-> FIP 풀(`.201~.250`)에서 **`.200`은 mgmt 전용**으로 제외.
+포트: 22, 80/443, 2377, 7946, 4789, 3306, 9090, 3000 등 (상세: `08-산출물` §3)
 
-### 11-2. SSH 설계 (발표용 다이어그램)
-
-mgmt는 provider(FIP) 세그먼트에 **직접 라우팅이 안 되므로**, 실무와 같이 **control을 점프호스트(ProxyJump)** 로 거쳐 tenant에 접속한다.
-
-```
-[운영자]
-    ▼
-mgmt-01 (.200)  — 외부 관리 / 모니터링(Ansible) 예정
-    │  ssh -J user1@172.16.8.100
-    ▼
-control (.100)  — OpenStack 컨트롤러
-    │  project_key
-    ▼
-tenant VM       — 예) swarm-mg FIP .219 / db01 private .101.31
-```
-
-**발표 멘트 (30초):**  
-「관리 전용 mgmt 노드를 `.200`에 두고, OpenStack 밖에서 Ansible·SSH로 운영한다. mgmt는 FIP망에 바로 못 붙어서 control을 경유하는 ProxyJump 구조로 설계했고, mgmt에는 project_key를 배포해 두었다.」
-
-### 11-3. 참고 명령 (문서·Q&A용, 발표 데모 ❌)
-
-```bash
-# mgmt → control → swarm-mg (설계상 공식 경로)
-ssh -o IdentitiesOnly=yes -J user1@172.16.8.100 -i ~/.ssh/id_rsa \
-  ubuntu@172.16.8.219
-
-# control에서 tenant (내부 검증·캡처용으로 충분)
-ssh -i /root/.ssh/id_rsa ubuntu@172.16.8.219
-ssh -J ubuntu@172.16.8.219 ubuntu@192.168.101.31   # db01 private
-```
-
-**[캡처 삽입]** (선택) 아키텍처 그림만 — mgmt → control → tenant 화살표  
-**[캡처 삽입]** (선택) control에서 `ssh ... 172.16.8.219` 성공 — tenant SSH 증명용
+![Horizon Security Groups](images/captures/12-horizon-security-groups.png)
 
 ---
 
-## 12. 검증에 사용한 명령 (control)
+## 11. mgmt 노드 & SSH (설계 — 발표는 구두)
+
+> mgmt VM 존재 + **ProxyJump SSH 설계**. 라이브 데모·캡처 증명 생략. tenant SSH는 control + `project_key` CLI로 검증.
+
+```
+mgmt-01 (.200)  →  control (.100)  →  tenant VM
+   관리/Ansible        -J ProxyJump      project_key
+```
+
+**발표 멘트:** 「mgmt `.200`에 관리 노드를 두고, FIP망 직접 접근 불가 → control 경유 ProxyJump로 tenant 운영 설계. project_key는 mgmt에 배포.」
+
+---
+
+## 12. CLI 검증 묶음 (보조)
+
+![server group + volume + floating ip 통합 캡처](images/captures/13-cli-combined-sg-volume-fip.png)
 
 ```bash
-sudo -i
-source /root/venv/bin/activate
 source /etc/kolla/admin-openrc.sh
-
 openstack compute service list
 openstack server list
 openstack server group list
 openstack volume list
 openstack floating ip list
 openstack network agent list
-openstack volume service list
 ```
 
-**[캡처 삽입]** 위 명령 터미널 출력 묶음 (1~2장)
+---
+
+## 13. 구축 과정 요약 (발표 멘트)
+
+1. Kolla-Ansible 멀티노드 배포 (control / network / storage / compute×3)
+2. public1 + project public/private + router
+3. Image·Flavor·SG·Keypair
+4. compute-02 신규 제작 (클론 금지)
+5. compute-03 추가 → swarm 3분산
+6. tenant 10대 · IP표·배치 준수
+7. anti-affinity + Cinder db 볼륨
+8. FIP 2개 · mgmt-01 + ProxyJump 설계
 
 ---
 
-## 13. 구축 과정 요약 (발표 멘트용)
+## 14. 실시연 vs 본 구축
 
-1. **Kolla-Ansible**로 control / network / storage / compute 멀티노드 배포
-2. External망(`public1`) + tenant public/private + router 구성
-3. Image(`ubuntu` 24.04), Flavor, SG, Keypair(`project_key`) 생성
-4. compute-node-02 **신규 제작** (클론 금지 — host 충돌 이슈 해결)
-5. compute-node-03 추가 → **swarm 3분산** 완료
-6. tenant VM 10대 생성 — IP·호스트 배치표 준수
-7. db01/db02 **anti-affinity** + **Cinder 10GB** 연결
-8. FIP 2개 연결, control → tenant SSH(bastion) 검증
-9. **mgmt-01(.200) 제작** + project_key 복사 → **ProxyJump SSH 설계** (mgmt → control → tenant)
+| 구분 | 본 구축 (발표) | 강사 PC 실시연 |
+|------|----------------|----------------|
+| OpenStack | 멀티노드 6VM + mgmt | 올인원 1VM |
+| 관리 | mgmt ProxyJump 설계 | mgmt + 모니터링 |
+| Swarm | 3노드 분산 설계 | 원노드 |
+| 증명 | **CLI·Horizon 캡처 13장** | 데모 단순화 |
 
 ---
 
-## 14. 실시연 환경과의 관계 (슬라이드 1장)
+## 15. 캡처 체크리스트 (완료)
 
-| 구분 | 본 구축 (발표 증명) | 강사 PC 실시연 |
-|------|---------------------|----------------|
-| OpenStack | **멀티노드 6VM** + mgmt | **올인원 1VM** |
-| 관리 | **mgmt-01** (ProxyJump SSH 설계) | **mgmt 1VM + 모니터링** |
-| Swarm | 3노드 분산 설계 | **원노드** |
-| 목적 | IaaS 설계·구축 역량 증명 | 데모·운영 단순화 |
-
-> 멀티노드 + **mgmt 노드**는 **「이렇게 설계하고 만들었다」**는 기술 증명.  
-> SSH 라이브 데모는 생략하고, **OpenStack CLI·Horizon 캡처**로 IaaS 구축을 증명한다.
-
----
-
-## 15. 캡처 체크리스트
-
-| # | 내용 | 필수 |
+| # | 내용 | 상태 |
 |:-:|------|:----:|
-| 1 | VMware VM (**mgmt 포함**) ON | ✅ |
-| 2 | `openstack compute service list` | ✅ |
-| 3 | `openstack server list` (10 ACTIVE) | ✅ |
-| 4 | `openstack volume list` (db 볼륨 in-use) | ✅ |
-| 5 | `openstack floating ip list` | ✅ |
-| 6 | `openstack network agent list` | ✅ |
-| 7 | mgmt → control → tenant **아키텍처 그림** (§11) | 권장 |
-| 8 | `openstack server group list` | 권장 |
-| 9 | Horizon 인스턴스 / 네트워크 탭 | 권장 |
-| 10 | (선택) control → tenant SSH 캡처 | 선택 |
+| 1 | VMware 7노드 ON | ✅ |
+| 2 | compute service list | ✅ |
+| 3 | server list 10 ACTIVE | ✅ |
+| 4 | volume list in-use | ✅ |
+| 5 | floating ip list | ✅ |
+| 6 | network agent list | ✅ |
+| 7 | server group list | ✅ |
+| 8 | Horizon Overview / Usage | ✅ |
+| 9 | Network Topology | ✅ |
+| 10 | Security Groups | ✅ |
+| 11 | mgmt SSH 라이브 | ⬜ 설계만 (의도적 생략) |
 
 ---
 
@@ -291,12 +248,11 @@ openstack volume service list
 
 | 문서 | 용도 |
 |------|------|
-| `08-산출물-8종-인수인계.md` | 상세 인수인계 (IP/SG/SSH 전체) |
+| `08-산출물-8종-인수인계.md` | 상세 인수인계 |
 | `문서화-마스터표.md` | 1페이지 요약 |
-| `오픈스택-구성-문서화.md` | SSOT · 운영 명령 |
-| `07-시연PC-전달-스냅샷-복원-가이드.md` | VM 패키징·복원 절차 |
+| `images/captures/README.md` | 캡처 파일 목록 |
 
 ---
 
 **작성:** 김현도  
-**최종 갱신:** 2026-07-06 (mgmt SSH — 설계 위주, 라이브 증명 생략)
+**최종 갱신:** 2026-07-06 (캡처 13장 배치 완료)
