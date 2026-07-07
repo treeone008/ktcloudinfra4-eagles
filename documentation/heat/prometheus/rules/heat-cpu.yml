@@ -1,0 +1,39 @@
+groups:
+  - name: heat_cpu_scaling
+    rules:
+      # swarm-mg CPU 사용률 (%). idle inverse 방식
+      - record: swarm:mgmt_cpu_usage:percent
+        expr: |
+          100 - (
+            avg by (instance) (
+              irate(node_cpu_seconds_total{job="swarm_nodes", role="swarm-mg", mode="idle"}[2m])
+            ) * 100
+          )
+
+      - record: swarm:worker_count
+        expr: |
+          count(up{job="swarm_nodes", role="swarm-worker"} == 1)
+
+      - alert: SwarmWorkerScaleUp
+        expr: swarm:mgmt_cpu_usage:percent > 80
+        for: 2m
+        labels:
+          severity: warning
+          action: scale_up
+        annotations:
+          summary: "swarm-mg CPU high — add worker"
+          description: "mgmt CPU {{ $value | printf \"%.1f\" }}% > 80% for 2m"
+
+      # scale down: 순간 spike 무시 — 5분 평균 CPU 사용
+      - record: swarm:mgmt_cpu_usage:percent:avg5m
+        expr: avg_over_time(swarm:mgmt_cpu_usage:percent[5m])
+
+      - alert: SwarmWorkerScaleDown
+        expr: swarm:mgmt_cpu_usage:percent:avg5m < 40
+        for: 1m
+        labels:
+          severity: info
+          action: scale_down
+        annotations:
+          summary: "swarm-mg CPU low — remove worker"
+          description: "mgmt CPU avg5m {{ $value | printf \"%.1f\" }}% < 40% for 1m (min worker enforced by webhook)"

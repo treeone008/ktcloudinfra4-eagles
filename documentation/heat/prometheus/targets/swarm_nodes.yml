@@ -1,0 +1,18 @@
+# 고정 IP — 스택/스케일과 무관하게 Prometheus target 변경 불필요
+# worker 슬롯 미사용 시 해당 target은 DOWN (알람에는 영향 없음)
+
+- targets: ['192.168.100.20:9100']
+  labels:
+    job: swarm_nodes
+    role: swarm-mg
+
+- targets:
+    - '192.168.100.23:9100'
+    - '192.168.100.24:9100'
+    - '192.168.100.25:9100'
+    - '192.168.100.26:9100'
+    - '192.168.100.27:9100'
+    - '192.168.100.28:9100'
+  labels:
+    job: swarm_nodes
+    role: swarm-worker
