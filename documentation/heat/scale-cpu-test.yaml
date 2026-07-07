@@ -1,0 +1,267 @@
+heat_template_version: 2018-08-31
+
+description: >
+  Ubuntu cloud CPU 스케일링 실습.
+  mg 192.168.100.20 / worker .23-.28
+  cloud-init (#cloud-config) + Nova fixed_ip
+
+parameters:
+  network:
+    type: string
+    description: project-public-net UUID
+  subnet:
+    type: string
+    description: 192.168.100.0/24 subnet UUID
+  image:
+    type: string
+    description: Ubuntu cloud image (openstack image list)
+  flavor:
+    type: string
+    default: m1.small
+  key_name:
+    type: string
+    description: openstack keypair list 이름 (Ubuntu cloud 필수)
+  ssh_public_key:
+    type: string
+    description: openstack keypair show <name> --public-key 출력 한 줄
+
+  gateway:
+    type: string
+    default: 192.168.100.1
+  monitor_cidr:
+    type: string
+    default: 172.16.8.0/24
+  worker_count:
+    type: number
+    default: 1
+    constraints:
+      - range: { min: 1, max: 6 }
+
+conditions:
+  worker_ge_2:
+    or:
+      - { equals: [{ get_param: worker_count }, 2] }
+      - { equals: [{ get_param: worker_count }, 3] }
+      - { equals: [{ get_param: worker_count }, 4] }
+      - { equals: [{ get_param: worker_count }, 5] }
+      - { equals: [{ get_param: worker_count }, 6] }
+  worker_ge_3:
+    or:
+      - { equals: [{ get_param: worker_count }, 3] }
+      - { equals: [{ get_param: worker_count }, 4] }
+      - { equals: [{ get_param: worker_count }, 5] }
+      - { equals: [{ get_param: worker_count }, 6] }
+  worker_ge_4:
+    or:
+      - { equals: [{ get_param: worker_count }, 4] }
+      - { equals: [{ get_param: worker_count }, 5] }
+      - { equals: [{ get_param: worker_count }, 6] }
+  worker_ge_5:
+    or:
+      - { equals: [{ get_param: worker_count }, 5] }
+      - { equals: [{ get_param: worker_count }, 6] }
+  worker_ge_6:
+    equals: [{ get_param: worker_count }, 6]
+
+resources:
+  secgrp:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: swarm-scale-sg-%stack_name%
+          params:
+            stack_name: { get_param: "OS::stack_name" }
+      rules:
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 9100
+          port_range_max: 9100
+          remote_ip_prefix: { get_param: monitor_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+          remote_ip_prefix: { get_param: monitor_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: icmp
+          remote_ip_prefix: 192.168.100.0/24
+        - direction: ingress
+          ethertype: IPv4
+          protocol: icmp
+          remote_ip_prefix: { get_param: monitor_cidr }
+
+  swarm_mg:
+    type: OS::Nova::Server
+    properties:
+      name: swarm-mg
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.20
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-mg-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.20"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w23:
+    type: OS::Nova::Server
+    properties:
+      name: swarm-worker-23
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.23
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.23"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w24:
+    type: OS::Nova::Server
+    condition: worker_ge_2
+    properties:
+      name: swarm-worker-24
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.24
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.24"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w25:
+    type: OS::Nova::Server
+    condition: worker_ge_3
+    properties:
+      name: swarm-worker-25
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.25
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.25"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w26:
+    type: OS::Nova::Server
+    condition: worker_ge_4
+    properties:
+      name: swarm-worker-26
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.26
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.26"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w27:
+    type: OS::Nova::Server
+    condition: worker_ge_5
+    properties:
+      name: swarm-worker-27
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.27
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.27"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+  worker_w28:
+    type: OS::Nova::Server
+    condition: worker_ge_6
+    properties:
+      name: swarm-worker-28
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.100.28
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.100.28"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+
+outputs:
+  swarm_mg_ip:
+    value: 192.168.100.20
+  worker_count:
+    value: { get_param: worker_count }

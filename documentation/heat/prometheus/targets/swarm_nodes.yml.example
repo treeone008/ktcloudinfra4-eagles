@@ -1,0 +1,20 @@
+# monitor VM: ~/monitoring/prometheus/targets/swarm_nodes.yml
+# 스택 생성 후 IP를 채운 뒤 prometheus restart
+#
+#   openstack server list -c Name -c Networks -f value | grep -E 'swarm-mg|swarm-worker'
+#
+# monitor(172.16.8.110) → VM private IP(:9100) 라우팅이 되어야 UP
+
+- targets:
+    - '192.168.100.XX:9100'   # swarm-mg IP
+  labels:
+    job: swarm_nodes
+    role: swarm-mg
+
+- targets:
+    - '192.168.100.YY:9100'   # swarm-worker #1
+  labels:
+    job: swarm_nodes
+    role: swarm-worker
+
+# worker 추가 시 target 블록을 더 넣거나, scale 후 IP 추가

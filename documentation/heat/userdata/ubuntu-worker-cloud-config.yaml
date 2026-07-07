@@ -1,0 +1,63 @@
+#cloud-config
+# Heat str_replace: __NODE_IP__ __NODE_GW__ __SSH_PUBKEY__
+
+ssh_pwauth: true
+chpasswd:
+  list: |
+    ubuntu:ubuntu
+  expire: false
+
+ssh_authorized_keys:
+  - __SSH_PUBKEY__
+
+network:
+  version: 2
+  ethernets:
+    primary:
+      match:
+        name: "en*"
+      dhcp4: false
+      addresses:
+        - __NODE_IP__/24
+      routes:
+        - to: default
+          via: __NODE_GW__
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+
+package_update: false
+packages:
+  - wget
+  - curl
+  - tar
+
+write_files:
+  - path: /etc/systemd/system/node_exporter.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Prometheus Node Exporter
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/node_exporter --web.listen-address=0.0.0.0:9100
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - |
+    set -ex
+    NE_VER=1.8.2
+    MIRROR=http://172.16.8.110:8888/node_exporter.tar.gz
+    GH=https://github.com/prometheus/node_exporter/releases/download/v${NE_VER}/node_exporter-${NE_VER}.linux-amd64.tar.gz
+    cd /tmp
+    wget -q -O ne.tar.gz "$MIRROR" || curl -fsSL -o ne.tar.gz "$GH"
+    tar xzf ne.tar.gz
+    install -m 755 node_exporter-${NE_VER}.linux-amd64/node_exporter /usr/local/bin/node_exporter
+    systemctl daemon-reload
+    systemctl enable --now node_exporter
+    echo ok > /var/log/swarm-worker-cloud-init.done
