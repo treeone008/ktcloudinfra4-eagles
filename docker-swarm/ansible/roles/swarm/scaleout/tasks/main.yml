@@ -1,0 +1,156 @@
+---
+# 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname,
+# swarm_leader_ip가 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
+
+- name: Ensure worker_ip is provided
+  run_once: true
+  delegate_to: localhost
+  assert:
+    that:
+      - worker_ip is defined
+      - worker_ip | length > 0
+    fail_msg: >-
+      -e worker_ip=<새로 조인시킬 워커의 IP> 를 지정하세요.
+
+# 인벤토리에 미리 등록 안 해도, IP만으로 임시 호스트를 만들어 씁니다.
+# ansible_user/ssh key/ProxyCommand는 hosts.ini의 [all:vars]에서 자동 상속됩니다.
+- name: Register the new worker as a temporary inventory host
+  run_once: true
+  delegate_to: localhost
+  add_host:
+    name: scaleout_new_worker
+    ansible_host: "{{ worker_ip }}"
+
+- name: Get worker join token from the leader
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker swarm join-token -q worker
+  register: worker_join_token_result
+  changed_when: false
+
+# 워커는 "docker node" 계열 명령을 쓸 권한이 없어서(self 조회 불가),
+# join 전/후 노드 ID 목록을 스냅샷해서 diff로 새 노드를 찾는 방식을 씁니다.
+- name: Snapshot node ID list before join
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node ls --format '{% raw %}{{.ID}}{% endraw %}'
+  register: node_ids_before_result
+  changed_when: false
+
+- name: Record join token, leader IP, and before-snapshot on control node
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    worker_join_token: "{{ worker_join_token_result.stdout | trim }}"
+    leader_ip: "{{ hostvars['localhost'].swarm_leader_ip }}"
+    node_ids_before: "{{ node_ids_before_result.stdout_lines }}"
+  delegate_to: localhost
+  delegate_facts: true
+
+- name: Join the new worker to the swarm
+  run_once: true
+  delegate_to: scaleout_new_worker
+  block:
+    - name: Wait for SSH to be available
+      wait_for_connection:
+        timeout: "{{ restore_wait_for_connection_timeout }}"
+
+    - name: Install Docker on the new worker (reuses swarm/docker role)
+      become: true
+      block:
+        - name: Include swarm/docker role
+          include_role:
+            name: swarm/docker
+
+    - name: Join swarm as worker
+      become: true
+      command: >
+        docker swarm join --token {{ hostvars['localhost'].worker_join_token }}
+        {{ hostvars['localhost'].leader_ip }}:2377
+      register: swarm_join_result
+      changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
+
+- name: Wait for the new worker to register with the manager
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  pause:
+    seconds: 5
+
+- name: Snapshot node ID list after join
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node ls --format '{% raw %}{{.ID}}{% endraw %}'
+  register: node_ids_after_result
+  changed_when: false
+
+- name: Identify the newly joined node's ID (before/after diff)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    new_worker_node_id: >-
+      {{
+        (node_ids_after_result.stdout_lines
+          | difference(hostvars['localhost'].node_ids_before))
+        | first
+      }}
+
+- name: Label the new worker with role=was
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node update --label-add role=was {{ new_worker_node_id }}
+  changed_when: true
+
+# stack 파일을 구조적으로 읽고, replicas만 안전하게 +1 해서 다시 씀
+# 원본(source of truth)은 서버가 아니라 Ansible 저장소 안의 파일입니다.
+- name: Read current stack file from the Ansible repo
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  slurp:
+    src: "{{ stack_file_repo_path }}"
+  register: stack_file_raw
+
+- name: Parse stack file
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    stack_yaml: "{{ stack_file_raw.content | b64decode | from_yaml }}"
+
+- name: Bump replicas by one
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    updated_stack_yaml: >-
+      {{
+        stack_yaml | combine({
+          'services': {
+            stack_service_name: {
+              'deploy': {
+                'replicas': (stack_yaml.services[stack_service_name].deploy.replicas | int) + 1
+              }
+            }
+          }
+        }, recursive=True)
+      }}
+
+- name: Write updated stack file back to the Ansible repo (source of truth)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  copy:
+    content: "{{ updated_stack_yaml | to_nice_yaml(indent=2) }}"
+    dest: "{{ stack_file_repo_path }}"
+
+- name: Copy updated stack file to the leader
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  copy:
+    src: "{{ stack_file_repo_path }}"
+    dest: "{{ stack_file_remote_path }}"
+
+- name: Redeploy the stack with the increased replica count
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker stack deploy -c {{ stack_file_remote_path }} {{ stack_name }}
+  register: stack_deploy_result
+  changed_when: true
+
+- name: Print scale-out result
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    msg: >-
+      워커({{ worker_ip }}) 조인 완료 (role=was),
+      {{ stack_service_name }} replicas →
+      {{ updated_stack_yaml.services[stack_service_name].deploy.replicas }}

@@ -1,0 +1,91 @@
+secrets:
+  db_name:
+    external: true
+  db_password:
+    external: true
+  db_primary_host:
+    external: true
+  db_primary_port:
+    external: true
+  db_replica_hosts:
+    external: true
+  db_type:
+    external: true
+  db_user:
+    external: true
+services:
+  board:
+    deploy:
+      mode: replicated
+      placement:
+        constraints:
+        - node.labels.role == was
+        max_replicas_per_node: 1
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        delay: 10s
+        order: stop-first
+        parallelism: 1
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+    healthcheck:
+      interval: 15s
+      retries: 3
+      start_period: 10s
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://localhost:3000/health
+      timeout: 5s
+    image: ${BOARD_IMAGE:-jaeyun1/board:blue}
+    logging:
+      driver: json-file
+      options:
+        max-file: '3'
+        max-size: 10m
+    ports:
+    - mode: host
+      published: 80
+      target: 3000
+    secrets:
+    - gid: '1000'
+      mode: 288
+      source: db_type
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_primary_host
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_primary_port
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_user
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_password
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_name
+      uid: '0'
+    - gid: '1000'
+      mode: 288
+      source: db_replica_hosts
+      uid: '0'
+version: '3.8'

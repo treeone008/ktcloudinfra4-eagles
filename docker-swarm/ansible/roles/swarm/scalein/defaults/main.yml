@@ -1,0 +1,10 @@
+---
+# stack 파일의 원본(source of truth)은 Ansible 저장소 안에 있습니다
+# (roles/swarm/deploy/files/stack.yml 을 매 배포 시 원격 /tmp로 복사하는 기존 방식과 동일)
+stack_file_repo_path: "{{ playbook_dir }}/roles/swarm/deploy/files/stack.yml"
+stack_file_remote_path: /tmp/stack.yml
+stack_name: board
+stack_service_name: board
+
+# replicas가 이 값 밑으로는 안 내려가게 하는 안전장치
+scale_in_min_replicas: 1

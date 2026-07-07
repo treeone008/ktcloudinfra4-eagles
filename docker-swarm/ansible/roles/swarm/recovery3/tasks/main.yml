@@ -1,0 +1,365 @@
+---
+# 1. S3에서 가장 최근 백업 파일 키를 찾는다 (LastModified 기준)
+- name: Find the most recent backup key in S3
+  run_once: true
+  delegate_to: localhost
+  environment:
+    AWS_PROFILE: "{{ aws_profile_name }}"
+  command: >
+    aws s3api list-objects-v2
+    --bucket {{ vault_s3_bucket }}
+    --prefix {{ s3_prefix }}/
+    --query "sort_by(Contents,&LastModified)[-1].Key"
+    --output text
+  register: latest_key_result
+  changed_when: false
+
+- name: Fail if no backup exists in S3
+  run_once: true
+  delegate_to: localhost
+  assert:
+    that:
+      - latest_key_result.stdout | trim != ""
+      - latest_key_result.stdout | trim != "None"
+    fail_msg: >-
+      s3://{{ vault_s3_bucket }}/{{ s3_prefix }}/ 아래에 백업 파일이 없습니다.
+      먼저 swarm/backup role로 백업을 만들었는지 확인하세요.
+
+- name: Record the latest backup key on control node
+  run_once: true
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    restore_source_key: "{{ latest_key_result.stdout | trim }}"
+
+# 2. 파일명에서 호스트명을 역산한다
+#    형식: <prefix>/<hostname>-swarm-backup-<timestamp>.tar.gz
+- name: Parse target hostname from backup filename
+  run_once: true
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    restore_target_hostname: >-
+      {{
+        (hostvars['localhost'].restore_source_key | basename)
+        | regex_replace('-swarm-backup-.*$', '')
+      }}
+
+- name: Print restore plan
+  run_once: true
+  debug:
+    msg: >-
+      최신 백업: s3://{{ vault_s3_bucket }}/{{ hostvars['localhost'].restore_source_key }}
+      → 복구 대상 노드: {{ hostvars['localhost'].restore_target_hostname }}
+
+- name: Fail if the parsed hostname is not part of this inventory group
+  run_once: true
+  delegate_to: localhost
+  assert:
+    that:
+      - hostvars['localhost'].restore_target_hostname in groups['swarm_managers']
+    fail_msg: >-
+      백업 파일명에서 얻은 호스트명({{ hostvars['localhost'].restore_target_hostname }})이
+      swarm_managers 그룹에 없습니다. inventory/hosts.ini를 확인하세요.
+
+# 3. mgmt로 최신 백업 파일을 내려받고, 무결성부터 확인한다
+- name: Create local backup directory
+  run_once: true
+  delegate_to: localhost
+  file:
+    path: "{{ backup_dir_local }}"
+    state: directory
+    mode: "0700"
+
+- name: Download the latest backup from S3 to mgmt
+  run_once: true
+  delegate_to: localhost
+  environment:
+    AWS_PROFILE: "{{ aws_profile_name }}"
+  command: >
+    aws s3 cp s3://{{ vault_s3_bucket }}/{{ hostvars['localhost'].restore_source_key }}
+    {{ backup_dir_local }}/restore-{{ hostvars['localhost'].restore_target_hostname }}.tar.gz
+  register: s3_download_result
+  changed_when: s3_download_result.rc == 0
+
+- name: Verify downloaded backup archive is not corrupted
+  run_once: true
+  delegate_to: localhost
+  command: >
+    tar -tzvf {{ backup_dir_local }}/restore-{{ hostvars['localhost'].restore_target_hostname }}.tar.gz
+  register: tar_verify_result
+  changed_when: false
+
+- name: Abort if downloaded backup failed integrity check
+  run_once: true
+  delegate_to: localhost
+  assert:
+    that:
+      - tar_verify_result.rc == 0
+    fail_msg: >-
+      다운로드한 백업 파일이 손상되었습니다. 복구를 중단합니다.
+      S3에 더 오래된 백업이 있는지 확인하세요.
+
+# 4. 복구 대상 노드(재생성되었다는 전제)에 restore
+- name: Restore swarm state on the recreated target node
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  block:
+    - name: Wait for SSH to be available (instance just recreated)
+      wait_for_connection:
+        timeout: "{{ restore_wait_for_connection_timeout }}"
+
+    - name: Stop docker (in case it auto-started with empty swarm state)
+      become: true
+      systemd:
+        name: docker
+        state: stopped
+
+    # README CRITICAL: dockerd가 완전히 죽은 뒤에 swarm 디렉터리를
+    # 건드려야 함. 재생성 직후라 대부분 이미 정지 상태겠지만,
+    # cloud-init이 docker를 자동 기동했을 가능성을 방어.
+    - name: Wait until dockerd process fully exits (max 30s)
+      become: true
+      command: pgrep -x dockerd
+      register: dockerd_check
+      until: dockerd_check.rc != 0
+      retries: 30
+      delay: 1
+      ignore_errors: true
+      changed_when: false
+
+    - name: Remove any existing swarm directory before restore
+      become: true
+      file:
+        path: "{{ docker_dir }}/swarm"
+        state: absent
+
+    # mgmt에 다운로드해둔 백업 파일을 대상 노드로 전송
+    - name: Copy backup archive from mgmt to target node
+      become: true
+      copy:
+        src: "{{ backup_dir_local }}/restore-{{ inventory_hostname }}.tar.gz"
+        dest: "/tmp/restore-{{ inventory_hostname }}.tar.gz"
+        mode: "0644"
+
+    # README: tar -xzvpf로 권한까지 그대로 복원. unarchive 모듈 대신
+    # 검증된 원본 명령을 그대로 사용.
+    - name: Extract backup archive with permissions preserved (tar -p)
+      become: true
+      command: >
+        tar -xzvpf /tmp/restore-{{ inventory_hostname }}.tar.gz
+        -C {{ docker_dir }}
+      register: tar_restore_result
+      changed_when: tar_restore_result.rc == 0
+
+    # README CRITICAL: 소유권/권한이 정확하지 않으면 dockerd가
+    # 부팅 시 바로 크래시합니다.
+    - name: Reset ownership and permissions on restored swarm directory (CRITICAL)
+      become: true
+      file:
+        path: "{{ docker_dir }}/swarm"
+        state: directory
+        recurse: true
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Reload systemd and start docker
+      become: true
+      systemd:
+        daemon_reload: true
+        name: docker
+        state: started
+
+    - name: Wait for docker to settle
+      pause:
+        seconds: 5
+
+    - name: Check for raft panic in docker logs
+      become: true
+      shell: journalctl -u docker.service -n 30 --no-pager | grep -i panic || true
+      register: panic_check
+      changed_when: false
+
+    - name: Print panic check result
+      debug:
+        msg: >-
+          {{ 'raft panic 감지됨 - force-new-cluster로 강제 복구 진행'
+             if panic_check.stdout | trim != ''
+             else 'panic 없음 - quorum 부족(no leader)이 원인일 가능성. force-new-cluster로 계속 진행' }}
+
+    - name: Initialize new swarm cluster from restored state
+      become: true
+      command: >
+        docker swarm init --force-new-cluster --advertise-addr {{ ansible_host }}
+      register: swarm_init_result
+      changed_when: "'Swarm initialized' in swarm_init_result.stdout"
+
+    - name: Retrieve manager join token
+      become: true
+      command: docker swarm join-token -q manager
+      register: manager_join_token_result
+      changed_when: false
+
+    - name: Record new leader IP and join token on control node
+      set_fact:
+        new_leader_ip: "{{ ansible_host }}"
+        manager_join_token: "{{ manager_join_token_result.stdout | trim }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Verify cluster is up
+      become: true
+      command: docker node ls
+      register: post_restore_node_ls
+      changed_when: false
+
+    - name: Print post-restore cluster state
+      debug:
+        var: post_restore_node_ls.stdout_lines
+
+# 5. 나머지 매니저(재생성되었다는 전제)를 새 리더에 재조인
+- name: Rejoin the remaining recreated managers
+  when: inventory_hostname != hostvars['localhost'].restore_target_hostname
+  block:
+    - name: Wait for SSH to be available (instance just recreated)
+      wait_for_connection:
+        timeout: "{{ restore_wait_for_connection_timeout }}"
+
+    - name: Ensure docker is running
+      become: true
+      systemd:
+        name: docker
+        state: started
+
+    - name: Remove any pre-existing swarm state
+      become: true
+      file:
+        path: "{{ docker_dir }}/swarm"
+        state: absent
+
+    - name: Restart docker to clear in-memory swarm state
+      become: true
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Wait for docker to settle
+      pause:
+        seconds: 5
+
+    - name: Join the new leader as manager
+      become: true
+      command: >
+        docker swarm join --token {{ hostvars['localhost'].manager_join_token }}
+        {{ hostvars['localhost'].new_leader_ip }}:2377
+      register: swarm_join_result
+      changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
+
+# 5.5. 유령(중복) 노드 정리 — 재조인이 전부 끝난 뒤에 실행
+#      force-new-cluster 직후에는 예전 노드들의 상태가 "Down"이 아니라
+#      "Unknown"으로 찍혀서 상태 문자열로 걸러내는 방식이 타이밍에
+#      취약했습니다. 대신 재조인이 다 끝난 지금, "같은 호스트명이
+#      두 번 이상 나오면 Ready가 아닌 쪽을 지운다"는 기준으로 정리합니다.
+- name: Find hostnames that appear more than once (leftover ghosts)
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  shell: >
+    docker node ls --format '{% raw %}{{.Hostname}}{% endraw %}' | sort | uniq -d
+  register: duplicate_hostnames_result
+  changed_when: false
+
+- name: Remove non-Ready duplicate entries for each repeated hostname
+  when:
+    - inventory_hostname == hostvars['localhost'].restore_target_hostname
+    - duplicate_hostnames_result.stdout_lines | length > 0
+  become: true
+  shell: >
+    docker node ls --format '{% raw %}{{.ID}} {{.Hostname}} {{.Status}}{% endraw %}'
+    | awk -v h="{{ item }}" '$2==h && $3!="Ready" {print $1}'
+    | xargs -r docker node rm --force
+  loop: "{{ duplicate_hostnames_result.stdout_lines }}"
+  register: ghost_cleanup_result
+  changed_when: (ghost_cleanup_result.stdout | default('')) | trim != ''
+
+- name: Show cluster state after ghost cleanup
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: docker node ls
+  register: post_cleanup_node_ls
+  changed_when: false
+
+- name: Print cluster state after ghost cleanup
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  debug:
+    var: post_cleanup_node_ls.stdout_lines
+
+# 6. 리더/WAS 역할 라벨 자동 부여
+#    Docker에 등록된 실제 노드명(OS 호스트명)이 Ansible 인벤토리 별칭과
+#    다를 수 있어(find-leader에서 겪은 것과 동일한 문제), 이름으로 지정하는
+#    대신 노드 ID만 사용합니다. ("self"는 docker node inspect에서는 되지만
+#    docker node update의 대상 인자로는 지원되지 않아 실제 ID로 변환해서 씀)
+- name: Get this node's own Docker node ID
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: >
+    docker node inspect self --format '{% raw %}{{.ID}}{% endraw %}'
+  register: self_node_id_result
+  changed_when: false
+
+- name: Label self (the new leader) with role=leader
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: docker node update --label-add role=leader {{ self_node_id_result.stdout | trim }}
+  changed_when: true
+
+- name: List all node IDs currently in the cluster
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: >
+    docker node ls --format '{% raw %}{{.ID}}{% endraw %}'
+  register: all_node_ids_result
+  changed_when: false
+
+- name: Label all other nodes with role=was
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: docker node update --label-add role=was {{ item }}
+  loop: >-
+    {{
+      all_node_ids_result.stdout_lines
+      | reject('equalto', self_node_id_result.stdout | trim)
+      | list
+    }}
+  changed_when: true
+
+- name: Show final label assignment for all nodes
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  become: true
+  command: >
+    docker node inspect --format
+    '{% raw %}{{.Description.Hostname}}: {{.Spec.Labels}}{% endraw %}'
+    {{ item }}
+  loop: "{{ all_node_ids_result.stdout_lines }}"
+  register: label_inspect_result
+  changed_when: false
+
+- name: Print label assignment
+  when: inventory_hostname == hostvars['localhost'].restore_target_hostname
+  debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ label_inspect_result.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# 7. 최종 확인 (아무 노드에서나 한 번)
+- name: Final cluster verification
+  run_once: true
+  become: true
+  command: docker node ls
+  register: final_node_ls
+  changed_when: false
+
+- name: Print final cluster state
+  run_once: true
+  debug:
+    var: final_node_ls.stdout_lines

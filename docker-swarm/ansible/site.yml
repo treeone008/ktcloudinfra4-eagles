@@ -1,0 +1,98 @@
+---
+- name: Install Docker
+  hosts: swarm_managers
+  become: true
+  tags: [docker, swarm_setup, swarm_recovery3, swarm_recovery2, swarm_recovery1]
+  roles:
+    - role: swarm/docker
+
+- name: Init Swarm on leader
+  hosts: swarm-mg
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/init
+
+- name: Join other managers
+  hosts: swarm-mg2,swarm-mg3
+  become: true
+  tags: [swarm_join, swarm_setup]
+  roles:
+    - role: swarm/join
+
+- name: Set node labels
+  hosts: swarm-mg
+  become: true
+  tags: swarm_setup
+  roles:
+    - role: swarm/labels
+
+- name: Deploy stack
+  hosts: swarm-mg
+  become: true
+  tags: [swarm_deploy, swarm_setup]
+  roles:
+    - role: swarm/deploy
+
+- name: Rolling update
+  hosts: swarm-mg
+  become: true
+  tags: swarm_update
+  roles:
+    - role: swarm/update
+
+- name: Rollback
+  hosts: swarm-mg
+  become: true
+  tags: swarm_rollback
+  roles:
+    - role: swarm/rollback
+
+- name: Discover current swarm leader
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_leader, swarm_backup, swarm_recovery1, swarm_scaleout, swarm_scalein]
+  roles:
+    - role: swarm/find-leader
+
+- name: Backup swarm state and upload to S3
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_backup]
+  roles:
+    - role: swarm/backup
+
+- name: Recovery swarm when 1 node down
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_recovery1]
+  roles:
+    - role: swarm/recovery1
+
+- name: Recovery swarm when 2 nodes down
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_recovery2]
+  roles:
+    - role: swarm/recovery2
+
+- name: Recovery swarm when 3 nodes down
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_recovery3]
+  roles:
+    - role: swarm/recovery3
+
+- name: Scale out - join a new worker and increase replicas
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_scaleout]
+  roles:
+    - role: swarm/scaleout
+
+- name: Scale in - remove a dead worker and decrease replicas
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_scalein]
+  roles:
+    - role: swarm/scalein

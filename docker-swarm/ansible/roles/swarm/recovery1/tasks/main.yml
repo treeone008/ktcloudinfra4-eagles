@@ -1,0 +1,173 @@
+---
+# 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname,
+# swarm_leader_ip가 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
+
+- name: Ensure down_node_hostname is provided
+  run_once: true
+  delegate_to: localhost
+  assert:
+    that:
+      - down_node_hostname is defined
+      - down_node_hostname | length > 0
+      - down_node_hostname in groups['swarm_managers']
+    fail_msg: >-
+      -e down_node_hostname=<재생성된 노드의 인벤토리 이름> 을 지정하세요.
+      (swarm_managers 그룹에 속한 이름이어야 합니다)
+
+- name: Get manager join token from the surviving leader
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker swarm join-token -q manager
+  register: manager_join_token_result
+  changed_when: false
+
+- name: Record join token and leader IP on control node
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    manager_join_token: "{{ manager_join_token_result.stdout | trim }}"
+    leader_ip: "{{ hostvars['localhost'].swarm_leader_ip }}"
+  delegate_to: localhost
+  delegate_facts: true
+
+# 재생성된 노드를, 여전히 정상 동작 중인 클러스터에 재조인
+- name: Rejoin the recreated node to the still-alive cluster
+  when: inventory_hostname == down_node_hostname
+  block:
+    - name: Wait for SSH to be available (instance just recreated)
+      wait_for_connection:
+        timeout: "{{ restore_wait_for_connection_timeout }}"
+
+    - name: Ensure docker is running
+      become: true
+      systemd:
+        name: docker
+        state: started
+
+    - name: Remove any stale swarm state (defensive; should already be fresh)
+      become: true
+      file:
+        path: "{{ docker_dir }}/swarm"
+        state: absent
+
+    - name: Restart docker to clear in-memory swarm state
+      become: true
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Wait for docker to settle
+      pause:
+        seconds: 5
+
+    - name: Join the surviving leader as manager
+      become: true
+      command: >
+        docker swarm join --token {{ hostvars['localhost'].manager_join_token }}
+        {{ hostvars['localhost'].leader_ip }}:2377
+      register: swarm_join_result
+      changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
+
+    - name: Wait for the rejoined node to register as a manager
+      pause:
+        seconds: 5
+
+    # 재조인한 노드는 다시 매니저이므로 self 조회가 가능합니다.
+    # 이 ID를 미리 확보해서, 뒤의 유령 정리 단계가 실수로
+    # 방금 재조인한 이 노드를 지우지 않도록 보호합니다.
+    - name: Get this node's own new Docker node ID after rejoining
+      become: true
+      command: >
+        docker node inspect self --format '{% raw %}{{.ID}}{% endraw %}'
+      register: rejoined_self_id_result
+      changed_when: false
+
+    - name: Record rejoined node's new ID on control node
+      set_fact:
+        rejoined_new_node_id: "{{ rejoined_self_id_result.stdout | trim }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+# 유령(중복) 노드 정리 — 재조인이 끝난 뒤에 실행
+# (재생성된 노드의 예전 raft 기록이 Down/Unknown 상태로 남아있고,
+#  같은 호스트명으로 새 항목이 하나 더 생겨서 중복이 발생할 수 있음)
+- name: Find hostnames that appear more than once (leftover ghosts)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  shell: >
+    docker node ls --format '{% raw %}{{.Hostname}}{% endraw %}' | sort | uniq -d
+  register: duplicate_hostnames_result
+  changed_when: false
+
+# 삭제 대상에서 방금 재조인한 새 노드의 ID는 항상 제외합니다.
+# 또한 대상이 매니저 역할이면 raft 안전성 때문에 강제 삭제가 거부되므로
+# (must be demoted to worker before removal) 먼저 demote한 뒤 삭제합니다.
+- name: Remove non-Ready duplicate entries for each repeated hostname
+  when:
+    - inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+    - duplicate_hostnames_result.stdout_lines | length > 0
+  become: true
+  shell: |
+    for id in $(docker node ls --format '{% raw %}{{.ID}} {{.Hostname}} {{.Status}}{% endraw %}' | \
+      awk -v h="{{ item }}" '$2==h && $3!="Ready" {print $1}'); do
+      if [ "$id" = "{{ hostvars['localhost'].rejoined_new_node_id | default('') }}" ]; then
+        continue
+      fi
+      role=$(docker node inspect "$id" --format '{% raw %}{{.Spec.Role}}{% endraw %}' 2>/dev/null)
+      if [ "$role" = "manager" ]; then
+        docker node demote "$id" || true
+      fi
+      docker node rm --force "$id"
+    done
+  args:
+    executable: /bin/bash
+  loop: "{{ duplicate_hostnames_result.stdout_lines }}"
+  register: ghost_cleanup_result
+  changed_when: (ghost_cleanup_result.stdout | default('')) | trim != ''
+
+# 라벨 재확인 (이미 정상이던 노드는 값이 그대로라 무해하고,
+# 새로 조인한 노드에만 실질적으로 role=was가 새로 붙습니다)
+- name: Get leader's own Docker node ID
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: >
+    docker node inspect self --format '{% raw %}{{.ID}}{% endraw %}'
+  register: self_node_id_result
+  changed_when: false
+
+- name: Ensure leader is labeled role=leader
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node update --label-add role=leader {{ self_node_id_result.stdout | trim }}
+  changed_when: true
+
+- name: List all node IDs currently in the cluster
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: >
+    docker node ls --format '{% raw %}{{.ID}}{% endraw %}'
+  register: all_node_ids_result
+  changed_when: false
+
+- name: Ensure all other nodes are labeled role=was
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node update --label-add role=was {{ item }}
+  loop: >-
+    {{
+      all_node_ids_result.stdout_lines
+      | reject('equalto', self_node_id_result.stdout | trim)
+      | list
+    }}
+  changed_when: true
+
+- name: Final cluster verification
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node ls
+  register: final_node_ls
+  changed_when: false
+
+- name: Print final cluster state
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    var: final_node_ls.stdout_lines

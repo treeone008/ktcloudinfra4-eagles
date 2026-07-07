@@ -1,0 +1,117 @@
+---
+# 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname
+# 이 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
+#
+# 인스턴스가 이미 삭제됐다는 전제라 SSH로 접근할 방법이 없으므로,
+# "어떤 노드가 삭제됐는지"는 사람이 지정하지 않고 리더에서
+# docker node ls로 Status=Down인 워커를 찾아 자동 판별합니다.
+
+- name: Find worker nodes and their status
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: >
+    docker node ls --filter role=worker --format '{% raw %}{{.ID}} {{.Status}}{% endraw %}'
+  register: worker_status_result
+  changed_when: false
+
+- name: Extract IDs of down workers
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    down_worker_ids: >-
+      {{
+        worker_status_result.stdout_lines
+        | select('search', 'Down')
+        | map('split', ' ')
+        | map('first')
+        | list
+      }}
+
+- name: Fail if no down worker was found (nothing to scale in)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  assert:
+    that:
+      - down_worker_ids | length > 0
+    fail_msg: >-
+      Down 상태의 worker 노드를 찾지 못했습니다.
+      인스턴스가 정말 삭제/다운됐는지 확인하세요.
+
+- name: Print scale-in plan
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    msg: "제거할 down worker 노드 ID: {{ down_worker_ids }}"
+
+- name: Remove the down worker node(s) from the swarm
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker node rm --force {{ item }}
+  loop: "{{ down_worker_ids }}"
+  register: node_rm_result
+  changed_when: true
+
+# stack 파일을 구조적으로 읽고, replicas만 안전하게 -1 해서 다시 씀
+# 원본(source of truth)은 서버가 아니라 Ansible 저장소 안의 파일입니다.
+- name: Read current stack file from the Ansible repo
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  slurp:
+    src: "{{ stack_file_repo_path }}"
+  register: stack_file_raw
+
+- name: Parse stack file
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    stack_yaml: "{{ stack_file_raw.content | b64decode | from_yaml }}"
+
+- name: Compute new replica count (never below the configured minimum)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    new_replica_count: >-
+      {{
+        [
+          (stack_yaml.services[stack_service_name].deploy.replicas | int) - 1,
+          scale_in_min_replicas | int
+        ] | max
+      }}
+
+- name: Apply the decreased replica count
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  set_fact:
+    updated_stack_yaml: >-
+      {{
+        stack_yaml | combine({
+          'services': {
+            stack_service_name: {
+              'deploy': {
+                'replicas': new_replica_count | int
+              }
+            }
+          }
+        }, recursive=True)
+      }}
+
+- name: Write updated stack file back to the Ansible repo (source of truth)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  copy:
+    content: "{{ updated_stack_yaml | to_nice_yaml(indent=2) }}"
+    dest: "{{ stack_file_repo_path }}"
+
+- name: Copy updated stack file to the leader
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  copy:
+    src: "{{ stack_file_repo_path }}"
+    dest: "{{ stack_file_remote_path }}"
+
+- name: Redeploy the stack with the decreased replica count
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: docker stack deploy -c {{ stack_file_remote_path }} {{ stack_name }}
+  register: stack_deploy_result
+  changed_when: true
+
+- name: Print scale-in result
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    msg: >-
+      down 노드 제거 완료, {{ stack_service_name }} replicas →
+      {{ updated_stack_yaml.services[stack_service_name].deploy.replicas }}

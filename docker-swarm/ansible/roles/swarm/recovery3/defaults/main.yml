@@ -1,0 +1,6 @@
+---
+docker_dir: /var/lib/docker
+backup_dir_local: "{{ playbook_dir }}/backups"
+s3_prefix: docker-swarm-backups
+aws_profile_name: swarm-backup
+restore_wait_for_connection_timeout: 300

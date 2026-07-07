@@ -1,0 +1,7 @@
+---
+docker_dir: /var/lib/docker
+restore_wait_for_connection_timeout: 300
+
+# 다운됐다가 재생성된 두 노드의 인벤토리 호스트명 목록 (필수, -e로 지정)
+# 예: -e down_node_hostnames='["swarm-mg2","swarm-mg3"]'
+down_node_hostnames: []
