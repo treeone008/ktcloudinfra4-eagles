@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>게시판</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #dbeafe;   /* v1 blue */
+    --surface:   #eff6ff;
+    --border:    #bfdbfe;
+    --text:      #1e3a5f;
+    --muted:     #5b8ab0;
+    --accent:    #1d4ed8;
+    --accent-hv: #1e40af;
+    --danger:    #dc2626;
+    --radius:    6px;
+    --shadow:    0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+  }
+
+  body {
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -.3px;
+    flex: 1;
+  }
+
+  main { max-width: 720px; margin: 0 auto; padding: 28px 16px 80px; }
+
+  /* ── Write form ── */
+  #write-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 28px;
+  }
+  #write-section h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 14px;
+  }
+
+  input[type="text"], textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--bg);
+    outline: none;
+    transition: border-color .15s;
+    resize: vertical;
+  }
+  input[type="text"]:focus, textarea:focus {
+    border-color: var(--accent);
+    background: #fff;
+  }
+  input[type="text"] { margin-bottom: 10px; }
+  textarea { min-height: 120px; }
+
+  .form-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 10px;
+    gap: 10px;
+  }
+  .char-count { font-size: 12px; color: var(--muted); }
+
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 20px;
+    transition: background .15s, opacity .15s;
+  }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  button.primary:hover  { background: var(--accent-hv); }
+  button.primary:active { opacity: .85; }
+  button:disabled       { opacity: .45; cursor: default; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1a1a18;
+    color: #fff;
+    padding: 9px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  #toast.error { background: var(--danger); }
+
+  /* ── Post list ── */
+  #posts-section h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 12px;
+  }
+
+  #post-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .post-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .post-item:hover {
+    border-color: #c5c5c0;
+    box-shadow: var(--shadow);
+  }
+  .post-item .post-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .post-item .post-date {
+    font-size: 12px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  /* ── Modal ── */
+  #modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 50;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 60px 16px 40px;
+  }
+  #modal-overlay.open { display: flex; }
+  #modal {
+    background: var(--surface);
+    border-radius: 8px;
+    max-width: 640px;
+    width: 100%;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 28px;
+    box-shadow: 0 20px 40px rgba(0,0,0,.18);
+  }
+  #modal h3 {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    word-break: keep-all;
+  }
+  #modal .modal-date { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+  #modal .modal-body {
+    font-size: 14px;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  #modal-close {
+    float: right;
+    background: none;
+    padding: 4px 8px;
+    font-size: 18px;
+    color: var(--muted);
+    font-weight: 400;
+    margin-top: -4px;
+  }
+  #modal-close:hover { color: var(--text); }
+
+  /* ── Pagination ── */
+  #pagination {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 20px;
+  }
+  #pagination button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 13px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  #pagination button.active,
+  #pagination button:hover:not(:disabled) {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  #session-badge {
+    font-size: 11px;
+    font-family: monospace;
+    color: var(--muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    letter-spacing: .03em;
+    user-select: all;
+  }
+  #session-badge.ok  { border-color: #86efac; color: #166534; background: #f0fdf4; }
+  #session-badge.err { border-color: #fca5a5; color: #991b1b; background: #fef2f2; }
+
+  #empty-msg {
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 40px 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📋 게시판</h1>
+  <span id="session-badge" title="세션 ID — 컨테이너가 바뀌어도 동일하면 세션 유지됨"></span>
+</header>
+
+<main>
+  <!-- 글쓰기 -->
+  <section id="write-section">
+    <h2>새 글 작성</h2>
+    <input type="text" id="title" placeholder="제목을 입력하세요" maxlength="300">
+    <textarea id="content" placeholder="내용을 입력하세요"></textarea>
+    <div class="form-footer">
+      <span class="char-count" id="content-count">0자</span>
+      <button class="primary" id="submit-btn" onclick="submitPost()">등록</button>
+    </div>
+  </section>
+
+  <!-- 글 목록 -->
+  <section id="posts-section">
+    <h2>글 목록</h2>
+    <div id="post-list"><p id="empty-msg">불러오는 중...</p></div>
+    <div id="pagination"></div>
+  </section>
+</main>
+
+<!-- 글 상세 모달 -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal">
+    <button id="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modal-title"></h3>
+    <p class="modal-date" id="modal-date"></p>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let currentPage = 1;
+
+// ── 날짜 포매터 ──────────────────────────────────────────
+function fmt(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit' })
+    + ' ' + d.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ── 글자수 카운터 ────────────────────────────────────────
+document.getElementById('content').addEventListener('input', function() {
+  document.getElementById('content-count').textContent = this.value.length.toLocaleString() + '자';
+});
+
+// ── 글 목록 로드 ─────────────────────────────────────────
+async function loadPosts(page = 1) {
+  currentPage = page;
+  const list = document.getElementById('post-list');
+  list.innerHTML = '<p id="empty-msg">불러오는 중...</p>';
+
+  try {
+    const res  = await fetch(`/api/posts?page=${page}`);
+    const data = await res.json();
+    renderList(data.posts, data.page, data.limit);
+  } catch {
+    list.innerHTML = '<p id="empty-msg">목록을 불러오지 못했습니다.</p>';
+  }
+}
+
+function renderList(posts, page, limit) {
+  const list = document.getElementById('post-list');
+  if (!posts.length) {
+    list.innerHTML = '<p id="empty-msg">아직 작성된 글이 없습니다.</p>';
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = posts.map(p => `
+    <div class="post-item" onclick="openPost(${p.id})">
+      <span class="post-title">${escape(p.title)}</span>
+      <span class="post-date">${fmt(p.created_at)}</span>
+    </div>
+  `).join('');
+
+  // 간단한 prev/next 페이지네이션
+  const pag = document.getElementById('pagination');
+  const hasPrev = page > 1;
+  const hasNext = posts.length === limit;
+  pag.innerHTML = `
+    ${hasPrev ? `<button onclick="loadPosts(${page-1})">이전</button>` : ''}
+    <button class="active" disabled>${page}</button>
+    ${hasNext ? `<button onclick="loadPosts(${page+1})">다음</button>` : ''}
+  `;
+}
+
+function escape(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── 글 상세 ──────────────────────────────────────────────
+async function openPost(id) {
+  try {
+    const res  = await fetch(`/api/posts/${id}`);
+    const post = await res.json();
+    document.getElementById('modal-title').textContent = post.title;
+    document.getElementById('modal-date').textContent  = fmt(post.created_at);
+    document.getElementById('modal-body').textContent  = post.content;
+    document.getElementById('modal-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  } catch {
+    showToast('글을 불러오지 못했습니다.', true);
+  }
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay') && e.target !== document.getElementById('modal-close')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── 글 등록 ──────────────────────────────────────────────
+async function submitPost() {
+  const title   = document.getElementById('title').value.trim();
+  const content = document.getElementById('content').value.trim();
+
+  if (!title)   { showToast('제목을 입력해주세요.', true); return; }
+  if (!content) { showToast('내용을 입력해주세요.', true); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '등록 중...';
+
+  try {
+    const res = await fetch('/api/posts', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ title, content }),
+    });
+    if (!res.ok) throw new Error();
+    document.getElementById('title').value   = '';
+    document.getElementById('content').value = '';
+    document.getElementById('content-count').textContent = '0자';
+    showToast('글이 등록되었습니다.');
+    loadPosts(1);
+  } catch {
+    showToast('등록에 실패했습니다. 잠시 후 다시 시도해주세요.', true);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '등록';
+  }
+}
+
+// ── 엔터키로 제출 (Shift+Enter = 줄바꿈) ────────────────
+document.getElementById('content').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) submitPost();
+});
+
+// ── Toast ────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 2500);
+}
+
+// ── ESC 닫기 ─────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal({ target: document.getElementById('modal-overlay') });
+});
+
+// ── 세션 확인 ────────────────────────────────────────────
+async function checkSession() {
+  const badge = document.getElementById('session-badge');
+  try {
+    const res  = await fetch('/api/session');
+    const data = await res.json();
+    const short = data.sid.slice(0, 8) + '…';
+    const ips   = data.container_ips.join(', ');
+    badge.textContent = `🔑 ${short} | 🖥 ${ips}`;
+    badge.className   = 'ok';
+    badge.title       = `세션 ID: ${data.sid} | 컨테이너 IP: ${ips}`;
+  } catch {
+    badge.textContent = '세션 오류';
+    badge.className   = 'err';
+  }
+}
+
+// ── 초기 로드 ────────────────────────────────────────────
+checkSession();
+loadPosts();
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+---
+- name: Pick backup target node
+  set_fact:
+    target_node: >-
+      {{
+        (groups['swarm_managers']
+          | difference([hostvars['localhost'].swarm_leader_hostname]))
+        | sort
+        | first
+      }}
+  run_once: true
+  delegate_to: localhost
+  delegate_facts: true
+
+- name: Print selected target node
+  debug:
+    msg: "Backup target node: {{ hostvars['localhost'].target_node }}"
+  run_once: true
+
+- name: Back up swarm state on the target node
+  when: inventory_hostname == hostvars['localhost'].target_node
+  block:
+    - name: Check running services before backup (for the record)
+      become: true
+      command: docker service ls
+      register: service_ls_before
+      changed_when: false
+      ignore_errors: true
+
+    - name: Print service list
+      debug:
+        var: service_ls_before.stdout_lines
+      when: service_ls_before is defined
+
+    # README 주의사항: 서비스를 막 생성/변경했다면 raft가 새 엔트리를
+    # 커밋하고 로컬 디스크에 flush할 시간(10~15초)이 필요합니다.
+    - name: Wait for raft to stabilize before stopping docker
+      pause:
+        seconds: 15
+
+    - name: Request docker stop
+      become: true
+      systemd:
+        name: docker
+        state: stopped
+
+    # README CRITICAL: systemctl stop은 비동기일 수 있어, dockerd가
+    # 실제로 완전히 죽었는지 확인하지 않고 백업하면 raft WAL/스냅샷
+    # 파일 간 일관성이 깨져 복원 시 panic이 날 수 있습니다.
+    - name: Wait until dockerd process fully exits (max 30s)
+      become: true
+      command: pgrep -x dockerd
+      register: dockerd_check
+      until: dockerd_check.rc != 0
+      retries: 30
+      delay: 1
+      ignore_errors: true
+      changed_when: false
+
+    - name: Abort if dockerd did not fully stop
+      assert:
+        that:
+          - dockerd_check.rc != 0
+        fail_msg: >-
+          dockerd가 30초 내에 완전히 정지하지 않았습니다.
+          raft 일관성이 깨질 수 있어 백업을 중단합니다.
+
+    # README: tar -czvpf (-p로 권한 보존). Ansible의 archive 모듈은
+    # 내부적으로 Python tarfile을 쓰기 때문에 실제 tar 바이너리와
+    # 권한 보존 동작이 다를 수 있어, 검증된 원본 명령을 그대로 사용.
+    - name: Archive swarm directory with permissions preserved (tar -p)
+      become: true
+      command: >
+        tar -czvpf {{ backup_dir_remote }}/{{ inventory_hostname }}-swarm-backup.tar.gz
+        -C {{ docker_dir }} swarm
+      register: tar_backup_result
+      changed_when: tar_backup_result.rc == 0
+
+    - name: Fix backup file ownership so it can be fetched
+      become: true
+      file:
+        path: "{{ backup_dir_remote }}/{{ inventory_hostname }}-swarm-backup.tar.gz"
+        owner: "{{ ansible_user }}"
+        mode: "0644"
+
+    - name: Start docker
+      become: true
+      systemd:
+        name: docker
+        state: started
+
+    - name: Wait for docker to settle
+      pause:
+        seconds: 5
+
+    - name: Verify cluster looks healthy after backup
+      become: true
+      command: docker node ls
+      register: post_backup_node_ls
+      changed_when: false
+      ignore_errors: true
+
+    - name: Print post-backup cluster state
+      debug:
+        var: post_backup_node_ls.stdout_lines
+      when: post_backup_node_ls is defined
+
+    - name: Generate backup timestamp
+      set_fact:
+        backup_timestamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: Create local backup directory
+      file:
+        path: "{{ backup_dir_local }}"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+
+    - name: Fetch backup file to mgmt
+      fetch:
+        src: "{{ backup_dir_remote }}/{{ inventory_hostname }}-swarm-backup.tar.gz"
+        dest: "{{ backup_dir_local }}/{{ inventory_hostname }}-swarm-backup-{{ hostvars['localhost'].backup_timestamp }}.tar.gz"
+        flat: true
+
+    - name: Record local backup path
+      set_fact:
+        local_backup_path: "{{ backup_dir_local }}/{{ inventory_hostname }}-swarm-backup-{{ hostvars['localhost'].backup_timestamp }}.tar.gz"
+      delegate_to: localhost
+      delegate_facts: true
+
+    # README 4번: 백업 파일 사전 점검. 압축 파일 자체 손상 여부만
+    # 확인 가능 (raft 내용의 논리적 정합성까지는 검증 불가).
+    - name: Verify backup archive is not corrupted
+      delegate_to: localhost
+      command: tar -tzvf {{ hostvars['localhost'].local_backup_path }}
+      register: tar_verify_result
+      changed_when: false
+
+    - name: Abort if backup archive failed integrity check
+      delegate_to: localhost
+      assert:
+        that:
+          - tar_verify_result.rc == 0
+        fail_msg: >-
+          {{ hostvars['localhost'].local_backup_path }} 압축 파일이 손상되었습니다.
+          S3 업로드를 중단합니다.
+
+- name: Upload backup to S3
+  when: inventory_hostname == hostvars['localhost'].target_node
+  delegate_to: localhost
+  environment:
+    AWS_PROFILE: "{{ aws_profile_name }}"
+  command: >
+    aws s3 cp {{ hostvars['localhost'].local_backup_path }}
+    s3://{{ vault_s3_bucket }}/{{ s3_prefix }}/{{ hostvars['localhost'].target_node }}-swarm-backup-{{ hostvars['localhost'].backup_timestamp }}.tar.gz
+  register: s3_upload_result
+  changed_when: s3_upload_result.rc == 0
+
+- name: Verify S3 upload with head-object
+  when: inventory_hostname == hostvars['localhost'].target_node
+  delegate_to: localhost
+  environment:
+    AWS_PROFILE: "{{ aws_profile_name }}"
+  command: >
+    aws s3api head-object --bucket {{ vault_s3_bucket }}
+    --key {{ s3_prefix }}/{{ hostvars['localhost'].target_node }}-swarm-backup-{{ hostvars['localhost'].backup_timestamp }}.tar.gz
+  changed_when: false
+
+- name: Print S3 upload location
+  debug:
+    msg: >-
+      Uploaded: s3://{{ vault_s3_bucket }}/{{ s3_prefix }}/{{ hostvars['localhost'].target_node }}-swarm-backup-{{ hostvars['localhost'].backup_timestamp }}.tar.gz
+  when: inventory_hostname == hostvars['localhost'].target_node
