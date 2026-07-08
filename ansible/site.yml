@@ -1,0 +1,84 @@
+---
+# ========================================================
+# [0단계] Common - 전체 인프라 노드 공통 초기 세팅 (Target: All)
+# ========================================================
+- name: "[0단계] Common Configuration for All Nodes"
+  hosts: all
+  gather_facts: yes
+  roles:
+    - { role: common/update_cache, tags: common }
+    - { role: common/upgrade_packages, tags: common }
+    - { role: common/install_utilities, tags: common }
+    - { role: common/setup_timezone, tags: common }
+    - { role: common/sync_time, tags: common }
+    - { role: common/ufw_settings, tags: common }
+
+# ========================================================
+# [1단계-A] Swarm - 전체 매니저 노드 Docker 엔진 설치 (Target: Swarm Managers)
+# ========================================================
+- name: "[1단계-A] Install Docker on All Swarm Managers"
+  hosts: swarm_managers
+  gather_facts: yes
+  roles:
+    - { role: swarm/docker, tags: swarm_docker }
+
+# ========================================================
+# [1단계-B] Swarm - 초기 리더 선출 (Target: Only swarm-mg)
+# ========================================================
+- name: "[1단계-B] Initialize Docker Swarm Leader"
+  hosts: swarm-mg
+  gather_facts: yes
+  roles:
+    - { role: swarm/init, tags: swarm_init }
+
+# ========================================================
+# [1단계-C] Swarm - 나머지 매니저 노드들 클러스터 조인 (Target: Swarm Managers)
+# ========================================================
+- name: "[1단계-C] Join Secondary Managers to Swarm"
+  hosts: swarm_managers
+  gather_facts: yes
+  roles:
+    - { role: swarm/join, tags: swarm_join }
+
+# ========================================================
+# [1단계-D] Swarm - 노드 라벨링 및 최종 Stack 배포 (Target: Only swarm-mg)
+# ========================================================
+- name: "[1단계-D] Node Labeling and Stack Deployment"
+  hosts: swarm-mg
+  gather_facts: yes
+  roles:
+    - { role: swarm/labels, tags: swarm_labels }
+    - { role: swarm/deploy, tags: swarm_deploy }
+
+# ========================================================
+# [2단계] Database - MariaDB 가상 인프라 구축 (Target: DB Nodes & Proxies)
+# ========================================================
+- name: "[2단계] Database Infrastructure Setup"
+  hosts: database_nodes, database_proxies
+  gather_facts: yes
+  roles:
+    - { role: database/mariadb_install, tags: db_infra }
+    - { role: database/mariadb_configure, tags: db_infra }
+
+# ========================================================
+# [3단계] Monitoring - 통합 관제 메트릭 수집 에이전트 배포 (Target: All)
+# ========================================================
+- name: "[3단계-A] Infrastructure Metrics Agent (Node Exporter)"
+  hosts: all
+  gather_facts: yes
+  roles:
+    - { role: monitoring/node_exporter_install, tags: monitoring }
+    - { role: monitoring/node_exporter_service, tags: monitoring }
+
+- name: "[3단계-B] Container Metrics Agent (cAdvisor)"
+  hosts: swarm_managers
+  gather_facts: no
+  roles:
+    - { role: monitoring/cadvisor, tags: cadvisor }
+
+- name: "[3단계-C] Database Metrics Agent (MySQLd Exporter)"
+  hosts: database_nodes
+  gather_facts: yes
+  roles:
+    - { role: monitoring/mysqld_exporter_install, tags: db_monitoring }
+    - { role: monitoring/mysqld_exporter_service, tags: db_monitoring }

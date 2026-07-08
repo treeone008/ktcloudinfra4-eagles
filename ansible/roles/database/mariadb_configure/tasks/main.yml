@@ -1,0 +1,13 @@
+---
+- name: 외부 원격 접속 허용을 위해 bind-address 설정을 0.0.0.0으로 개방
+  lineinfile:
+    path: /etc/mysql/mariadb.conf.d/50-server.cnf
+    regexp: '^bind-address'
+    line: 'bind-address            = 0.0.0.0'
+  notify: Restart MariaDB Service  # 👈 이제 같은 레벨의 handlers를 정상 호출합니다.
+
+- name: MariaDB 데몬 시스템 서비스 활성화 및 가동
+  systemd:
+    name: mariadb
+    state: started
+    enabled: yes
