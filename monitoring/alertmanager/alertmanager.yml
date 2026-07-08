@@ -1,0 +1,58 @@
+global:
+  resolve_timeout: 5m
+
+  smtp_smarthost: smtp.gmail.com:587
+  smtp_from: treeone898@gmail.com
+  smtp_auth_username: treeone898@gmail.com
+  smtp_auth_password_file: /run/secrets/gmail_app_password
+  smtp_require_tls: true
+
+route:
+  receiver: team-alert-receiver
+
+  group_by:
+    - alertname
+    - node
+
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  - name: team-alert-receiver
+    email_configs:
+      - to: treeone898@gmail.com
+        send_resolved: true
+
+        headers:
+          Subject: '[Cloud Monitoring] {{ .Status }} - {{ .CommonLabels.alertname }} - {{ .CommonLabels.node }}'
+
+        text: |
+          상태: {{ .Status }}
+          프로젝트: Cloud Monitoring
+
+          {{ range .Alerts }}
+          경고명: {{ .Labels.alertname }}
+          대상 노드: {{ .Labels.node }}
+          심각도: {{ .Labels.severity }}
+          요약: {{ .Annotations.summary }}
+          설명: {{ .Annotations.description }}
+          시작 시각: {{ .StartsAt }}
+          {{ end }}
+
+    slack_configs:
+      - api_url_file: /run/secrets/slack_webhook_url
+        send_resolved: true
+        title: '[Cloud Monitoring] {{ .Status }} - {{ .CommonLabels.alertname }} - {{ .CommonLabels.node }}'
+        text: |
+          *상태:* {{ .Status }}
+          *프로젝트:* Cloud Monitoring
+
+          {{ range .Alerts }}
+          *경고명:* {{ .Labels.alertname }}
+          *대상 노드:* {{ .Labels.node }}
+          *심각도:* {{ .Labels.severity }}
+          *요약:* {{ .Annotations.summary }}
+          *설명:* {{ .Annotations.description }}
+          *시작 시각:* {{ .StartsAt }}
+          {{ end }}

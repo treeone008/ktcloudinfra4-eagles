@@ -1,0 +1,47 @@
+groups:
+  - name: proxy-ha-alerts
+    rules:
+      - alert: DBProxyNodeDown
+        expr: up{job="openstack-node", role="db-proxy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB Proxy node down: {{ $labels.node }}"
+          description: "{{ $labels.node }}의 node_exporter가 응답하지 않음. DB Proxy 노드 장애 가능성 확인 필요."
+
+      - alert: DBProxyVIPMaxScaleDown
+        expr: up{job="maxscale", target_type="vip"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB Proxy VIP MaxScale unreachable"
+          description: "VIP 기준 MaxScale exporter가 응답하지 않음. VIP 이동 또는 MaxScale 서비스 상태 확인 필요."
+
+      - alert: MaxScaleBackendDown
+        expr: (1 - max by (node, server, address) (maxctrl_server_up{job="maxscale", target_type="vip"})) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale backend down: {{ $labels.server }}"
+          description: "VIP 기준 MaxScale에서 {{ $labels.server }} 백엔드 DB가 Down 상태로 감지됨."
+
+      - alert: MaxScaleNoPrimary
+        expr: sum(maxctrl_server_up{job="maxscale", target_type="vip", status=~".*(Master|Primary).*"}) < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale detected no primary DB"
+          description: "VIP 기준 MaxScale에서 Primary/Master DB가 감지되지 않음."
+
+      - alert: MaxScaleMultiplePrimary
+        expr: sum(maxctrl_server_up{job="maxscale", target_type="vip", status=~".*(Master|Primary).*"}) > 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale detected multiple primary DBs"
+          description: "VIP 기준 MaxScale에서 Primary/Master DB가 2개 이상 감지됨. Split-Brain 가능성 확인 필요."

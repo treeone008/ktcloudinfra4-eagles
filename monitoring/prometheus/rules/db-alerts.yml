@@ -1,0 +1,47 @@
+groups:
+  - name: db-alerts
+    rules:
+      - alert: MySQLExporterDown
+        expr: up{job="mysql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL exporter down on {{ $labels.node }}"
+          description: "{{ $labels.node }}의 mysqld_exporter가 응답하지 않음."
+
+      - alert: DatabaseInstanceDown
+        expr: mysql_up{job="mysql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MariaDB down on {{ $labels.node }}"
+          description: "{{ $labels.node }}의 MariaDB가 응답하지 않음."
+
+      - alert: DBReplicaIOStopped
+        expr: max by (node, db_role) (mysql_slave_status_slave_io_running{job="mysql"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB replica IO thread stopped on {{ $labels.node }}"
+          description: "{{ $labels.node }} Replica의 IO Thread가 중지됨."
+
+      - alert: DBReplicaSQLStopped
+        expr: max by (node, db_role) (mysql_slave_status_slave_sql_running{job="mysql"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB replica SQL thread stopped on {{ $labels.node }}"
+          description: "{{ $labels.node }} Replica의 SQL Thread가 중지됨."
+
+      - alert: DBReplicationLagHigh
+        expr: max by (node, db_role) (mysql_slave_status_seconds_behind_master{job="mysql"}) > 30
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB replication lag high on {{ $labels.node }}"
+          description: "{{ $labels.node }} Replica 복제 지연이 30초를 초과함."

@@ -1,0 +1,26 @@
+- targets:
+    - 192.168.101.40:9105
+  labels:
+    node: db_proxy-01
+    role: db-proxy
+    layer: openstack-instance
+    component: maxscale
+    target_type: node
+
+- targets:
+    - 192.168.101.41:9105
+  labels:
+    node: db-proxy-02
+    role: db-proxy
+    layer: openstack-instance
+    component: maxscale
+    target_type: node
+
+- targets:
+    - 192.168.101.50:9105
+  labels:
+    node: db-proxy-vip
+    role: db-proxy
+    layer: openstack-instance
+    component: maxscale
+    target_type: vip

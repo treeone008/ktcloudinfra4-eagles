@@ -1,0 +1,70 @@
+===== DATE =====
+Wed Jun 17 04:27:05 PM KST 2026
+
+===== HOSTNAME =====
+ Static hostname: moniter
+       Icon name: computer-vm
+         Chassis: vm 🖴
+      Machine ID: 4c9df8d174164657abe3b883bd00f814
+         Boot ID: b010348f9be9427fa593d1d3e7d0bfb8
+  Virtualization: vmware
+Operating System: Ubuntu 24.04.4 LTS
+          Kernel: Linux 6.17.0-35-generic
+    Architecture: x86-64
+ Hardware Vendor: VMware, Inc.
+  Hardware Model: VMware Virtual Platform
+Firmware Version: 6.00
+   Firmware Date: Thu 2020-11-12
+    Firmware Age: 5y 7month 3d
+
+===== OS =====
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.4 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+
+===== NETWORK =====
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens32            UP             172.16.8.40/24 
+ens33            UP             192.168.100.40/24 fe80::2dc7:a3b1:d5b5:3bd4/64 
+ens34            UP             192.168.101.40/24 fe80::4f6f:d09d:4309:99ca/64 
+
+===== ROUTE =====
+default via 172.16.8.2 dev ens32 proto static metric 100 
+172.16.8.0/24 dev ens32 proto kernel scope link src 172.16.8.40 metric 100 
+192.168.100.0/24 dev ens33 proto kernel scope link src 192.168.100.40 metric 101 
+192.168.101.0/24 dev ens34 proto kernel scope link src 192.168.101.40 metric 102 
+
+===== MEMORY =====
+               total        used        free      shared  buff/cache   available
+Mem:           3.8Gi       1.8Gi       273Mi        26Mi       2.0Gi       2.0Gi
+Swap:          3.8Gi        64Ki       3.8Gi
+
+===== DISK =====
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda2        40G   11G   27G  28% /
+
+===== PYTHON =====
+Python 3.12.3
+
+===== SSH =====
+LISTEN 0      4096         0.0.0.0:22         0.0.0.0:*          
+LISTEN 0      4096            [::]:22            [::]:*          
+
+===== TIME =====
+               Local time: Wed 2026-06-17 16:27:06 KST
+           Universal time: Wed 2026-06-17 07:27:06 UTC
+                 RTC time: Wed 2026-06-17 07:27:05
+                Time zone: Asia/Seoul (KST, +0900)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no

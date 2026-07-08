@@ -1,0 +1,38 @@
+groups:
+  - name: node-alerts
+    rules:
+      - alert: NodeExporterDown
+        expr: up{job="openstack-node"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node Exporter down on {{ $labels.node }}"
+          description: "{{ $labels.node }} 노드의 Node Exporter가 1분 이상 응답하지 않음."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance, node, role) (rate(node_cpu_seconds_total{job="openstack-node", mode="idle"}[2m])) * 100) > 80
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.node }}"
+          description: "{{ $labels.node }} CPU 사용률이 3분 이상 80%를 초과함."
+
+      - alert: HighMemoryUsage
+        expr: 100 * (1 - (node_memory_MemAvailable_bytes{job="openstack-node"} / node_memory_MemTotal_bytes{job="openstack-node"})) > 80
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.node }}"
+          description: "{{ $labels.node }} 메모리 사용률이 3분 이상 80%를 초과함."
+
+      - alert: HighDiskUsage
+        expr: 100 * (1 - (node_filesystem_avail_bytes{job="openstack-node", fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="openstack-node", fstype!~"tmpfs|overlay"})) > 85
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage on {{ $labels.node }}"
+          description: "{{ $labels.node }} 디스크 사용률이 3분 이상 85%를 초과함."

@@ -1,0 +1,38 @@
+groups:
+  - name: maxscale-alerts
+    rules:
+      - alert: MaxScaleExporterDown
+        expr: up{job="maxscale", node="db_proxy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale exporter down on {{ $labels.node }}"
+          description: "{{ $labels.node }}의 MaxScale exporter가 응답하지 않음."
+
+      - alert: MaxScaleBackendDown
+        expr: (1 - max by (node, server, address) (maxctrl_server_up{job="maxscale", node="db_proxy"})) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale backend down: {{ $labels.server }}"
+          description: "MaxScale 기준으로 {{ $labels.server }} 백엔드 DB가 Down 상태임."
+
+      - alert: MaxScaleNoPrimary
+        expr: sum(maxctrl_server_up{job="maxscale", node="db_proxy", status=~".*(Master|Primary).*"}) < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale detected no primary DB"
+          description: "MaxScale 기준으로 Master/Primary 상태의 DB가 없음."
+
+      - alert: MaxScaleMultiplePrimary
+        expr: sum(maxctrl_server_up{job="maxscale", node="db_proxy", status=~".*(Master|Primary).*"}) > 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MaxScale detected multiple primary DBs"
+          description: "MaxScale 기준으로 Master/Primary DB가 2대 이상 감지됨. Split-Brain 가능성 확인 필요."
