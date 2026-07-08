@@ -1,0 +1,38 @@
+db-proxy-02
+Cluster name: proxy-cluster
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: db-proxy-01 (version 2.1.6-6fdc9deea29) - partition with quorum
+  * Last updated: Wed Jul  8 09:16:53 2026 on db-proxy-02
+  * Last change:  Wed Jul  8 08:52:41 2026 by root via cibadmin on db-proxy-01
+  * 2 nodes configured
+  * 2 resource instances configured
+
+Node List:
+  * Online: [ db-proxy-01 db-proxy-02 ]
+
+Full List of Resources:
+  * Resource Group: g_db_proxy:
+    * p_vip	(ocf:heartbeat:IPaddr2):	 Started db-proxy-01
+    * p_maxscale	(systemd:maxscale):	 Started db-proxy-01
+
+Daemon Status:
+  corosync: active/enabled
+  pacemaker: active/enabled
+  pcsd: active/enabled
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens3             UP             192.168.101.41/24 metric 100 fe80::f816:3eff:fe36:6d21/64 
+○ maxscale.service - MariaDB MaxScale Database Proxy
+     Loaded: loaded (/usr/lib/systemd/system/maxscale.service; disabled; preset: enabled)
+     Active: inactive (dead)
+
+Jul 07 09:20:13 db-proxy-02 systemd[1]: Stopped maxscale.service - MariaDB MaxScale Database Proxy.
+Jul 07 09:21:37 db-proxy-02 systemd[1]: Starting maxscale.service - Cluster Controlled maxscale...
+Jul 07 09:21:37 db-proxy-02 maxscale[14048]: Module 'mariadbmon' loaded from '/usr/lib/x86_64-linux-gnu/maxscale/libmariadbmon.so'.
+Jul 07 09:21:37 db-proxy-02 maxscale[14048]: Module 'readwritesplit' loaded from '/usr/lib/x86_64-linux-gnu/maxscale/libreadwritesplit.so'.
+Jul 07 09:21:37 db-proxy-02 maxscale[14048]: Using up to 295.14MiB of memory for query classifier cache
+Jul 07 09:21:37 db-proxy-02 systemd[1]: Started maxscale.service - Cluster Controlled maxscale.
+Jul 08 08:21:53 db-proxy-02 systemd[1]: Stopping maxscale.service - MariaDB MaxScale Database Proxy...
+Jul 08 08:21:55 db-proxy-02 systemd[1]: maxscale.service: Deactivated successfully.
+Jul 08 08:21:56 db-proxy-02 systemd[1]: Stopped maxscale.service - MariaDB MaxScale Database Proxy.
+Jul 08 08:21:56 db-proxy-02 systemd[1]: maxscale.service: Consumed 37min 6.913s CPU time, 5.0M memory peak, 0B memory swap peak.
