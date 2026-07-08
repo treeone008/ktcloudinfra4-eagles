@@ -1,0 +1,88 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.3
+    container_name: prometheus
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+      
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:13.0.2
+    container_name: grafana
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    depends_on:
+      - prometheus
+
+    networks:
+      - monitoring
+
+
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.0
+    container_name: alertmanager
+    restart: unless-stopped
+
+    ports:
+      - "9093:9093"
+
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./secrets/gmail_app_password:/run/secrets/gmail_app_password:ro
+      - ./secrets/slack_webhook_url:/run/secrets/slack_webhook_url:ro
+      - alertmanager_data:/alertmanager
+
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+
+    networks:
+      - monitoring
+
+
+
+
+networks:
+  monitoring:
+    name: monitoring
+    driver: bridge
+
+volumes:
+  prometheus_data:
+    name: prometheus_data
+
+  grafana_data:
+    name: grafana_data
+
+  alertmanager_data:
+    name: alertmanager_data

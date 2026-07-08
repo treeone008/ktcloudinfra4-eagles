@@ -1,0 +1,113 @@
+# =========================
+# OpenStack infra / host nodes
+# =========================
+
+- targets:
+    - 172.16.8.200:9100
+  labels:
+    node: mgmt
+    role: management
+    layer: external-openstack
+
+- targets:
+    - 172.16.8.100:9100
+  labels:
+    node: controll
+    role: controller
+    layer: openstack-host
+
+- targets:
+    - 172.16.8.101:9100
+  labels:
+    node: network
+    role: network
+    layer: openstack-host
+
+- targets:
+    - 172.16.8.102:9100
+  labels:
+    node: storage
+    role: storage
+    layer: openstack-host
+
+- targets:
+    - 172.16.8.103:9100
+  labels:
+    node: compute1
+    role: compute
+    layer: openstack-host
+
+- targets:
+    - 172.16.8.104:9100
+  labels:
+    node: compute2
+    role: compute
+    layer: openstack-host
+
+- targets:
+    - 172.16.8.110:9100
+  labels:
+    node: monitor
+    role: monitoring
+    layer: external-monitoring
+
+
+# =========================
+# OpenStack instances
+# =========================
+
+- targets:
+    - 192.168.100.20:9100
+  labels:
+    node: swarm-mg
+    role: swarm-manager
+    layer: openstack-instance
+
+- targets:
+    - 192.168.100.21:9100
+  labels:
+    node: swarm-mg2
+    role: swarm-manager
+    layer: openstack-instance
+
+- targets:
+    - 192.168.100.22:9100
+  labels:
+    node: swarm-mg3
+    role: swarm-manager
+    layer: openstack-instance
+
+
+# =========================
+# OpenStack instances - DB
+# =========================
+
+- targets:
+    - 192.168.101.31:9100
+  labels:
+    node: db01
+    role: database
+    layer: openstack-instance
+    db_role: primary
+
+- targets:
+    - 192.168.101.32:9100
+  labels:
+    node: db02
+    role: database
+    layer: openstack-instance
+    db_role: replica
+
+- targets:
+    - 192.168.101.40:9100
+  labels:
+    node: db_proxy-01
+    role: db-proxy
+    layer: openstack-instance
+
+- targets:
+    - 192.168.101.41:9100
+  labels:
+    node: db-proxy-02
+    role: db-proxy
+    layer: openstack-instance
