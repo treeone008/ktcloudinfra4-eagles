@@ -6,8 +6,8 @@
   hosts: all
   gather_facts: yes
   roles:
-    - { role: common/update_cache, tags: common }
-    - { role: common/upgrade_packages, tags: common }
+      # - { role: common/update_cache, tags: common }
+      # - { role: common/upgrade_packages, tags: common }
     - { role: common/install_utilities, tags: common }
     - { role: common/setup_timezone, tags: common }
     - { role: common/sync_time, tags: common }
@@ -33,11 +33,7 @@
     - { role: monitoring/node_exporter_install, tags: monitoring }
     - { role: monitoring/node_exporter_service, tags: monitoring }
 
-- name: "[2단계-B] Container Metrics Agent (cAdvisor)"
-  hosts: swarm_managers
-  gather_facts: no
-  roles:
-    - { role: monitoring/cadvisor, tags: cadvisor }
+# cAdvisor 단계가 제외되었습니다.
 
 - name: "[2단계-C] Database Metrics Agent (MySQLd Exporter)"
   hosts: database_nodes
