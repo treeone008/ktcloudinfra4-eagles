@@ -83,6 +83,13 @@
   roles:
     - role: swarm/recovery3
 
+- name: Provision new worker instance on OpenStack
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_scaleout]
+  roles:
+    - role: swarm/provision
+
 - name: Scale out - join a new worker and increase replicas
   hosts: swarm_managers
   gather_facts: false

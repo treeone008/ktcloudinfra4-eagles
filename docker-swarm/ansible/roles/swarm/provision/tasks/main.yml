@@ -1,0 +1,121 @@
+---
+- name: List existing worker hostnames from the swarm
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  become: true
+  command: >
+    docker node ls --filter role=worker --format '{% raw %}{{.Hostname}}{% endraw %}'
+  register: swarm_worker_hostnames_result
+  changed_when: false
+
+- name: List existing OpenStack instances matching worker pattern
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.server_info:
+    cloud: mycloud
+  register: os_server_info_result
+
+- name: Compute the next worker number and name
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    new_worker_name: >-
+      swarm-worker{{
+        (
+          (
+            (swarm_worker_hostnames_result.stdout_lines | select('match', '^swarm-worker[0-9]+$') | list)
+            + (os_server_info_result.servers | map(attribute='name') | select('match', '^swarm-worker[0-9]+$') | list)
+          )
+          | map('regex_replace', '^swarm-worker', '')
+          | map('int')
+          | list
+          + [0]
+        ) | max + 1
+      }}
+
+- name: Compute IP from worker number (deterministic mapping)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    worker_ip: >-
+      192.168.1.{{
+        22 + (hostvars['localhost'].new_worker_name | regex_replace('^swarm-worker', '') | int)
+      }}
+
+- name: Check the computed IP is not already in use
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.port_info:
+    cloud: mycloud
+    filters:
+      network_id: "b83dc85c-2232-4120-b3c2-f1025794b459"
+      fixed_ips: "ip_address={{ hostvars['localhost'].worker_ip }}"
+  register: ip_conflict_check
+
+- name: Fail if the computed IP is already taken
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  assert:
+    that:
+      - ip_conflict_check.ports | length == 0
+    fail_msg: >-
+      {{ hostvars['localhost'].worker_ip }} 가 이미 사용 중입니다.
+      수동으로 정리 후 다시 시도하세요.
+
+- name: Print provision plan
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    msg: >-
+      생성할 워커: {{ hostvars['localhost'].new_worker_name }}
+      (IP {{ hostvars['localhost'].worker_ip }})
+
+- name: Create a port with the computed fixed IP
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.port:
+    cloud: mycloud
+    state: present
+    name: "{{ hostvars['localhost'].new_worker_name }}-port"
+    network: "webserver"
+    security_groups:
+      - web-sg
+    fixed_ips:
+      - subnet_id: "71b02a0b-6be3-4cee-b87d-1cfa7ff848ab"
+        ip_address: "{{ hostvars['localhost'].worker_ip }}"
+  register: new_port
+
+- name: Create OpenStack instance for the new worker
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.server:
+    cloud: mycloud
+    state: present
+    name: "{{ hostvars['localhost'].new_worker_name }}"
+    image: "ubuntu"
+    flavor: "m1.small"
+    key_name: "openstack2"
+    nics:
+      - port-id: "{{ new_port.port.id }}"
+    auto_ip: false
+    wait: true
+    timeout: 300
+  register: new_instance
+
+- name: Register new worker as LB pool member
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.lb_member:
+    cloud: mycloud
+    state: present
+    name: "{{ hostvars['localhost'].new_worker_name }}"
+    pool: "1685b950-c1fc-4878-8a3e-56b3dc87e819"
+    address: "{{ hostvars['localhost'].worker_ip }}"
+    protocol_port: 80
+    subnet_id: "71b02a0b-6be3-4cee-b87d-1cfa7ff848ab"
+
+- name: Print provision result
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  debug:
+    msg: >-
+      인스턴스 생성 및 LB 등록 완료:
+      {{ hostvars['localhost'].new_worker_name }} ({{ hostvars['localhost'].worker_ip }})

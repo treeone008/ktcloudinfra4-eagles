@@ -1,25 +1,26 @@
 ---
 # 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname,
 # swarm_leader_ip가 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
+# 또한 swarm/provision이 먼저 실행되어 hostvars['localhost'].new_worker_name,
+# worker_ip가 채워져 있다는 전제로 동작합니다.
 
-- name: Ensure worker_ip is provided
+- name: Ensure provision facts are available
   run_once: true
   delegate_to: localhost
   assert:
     that:
-      - worker_ip is defined
-      - worker_ip | length > 0
+      - hostvars['localhost'].new_worker_name is defined
+      - hostvars['localhost'].worker_ip is defined
     fail_msg: >-
-      -e worker_ip=<새로 조인시킬 워커의 IP> 를 지정하세요.
+      swarm/provision 이 먼저 실행되어 new_worker_name/worker_ip 가 계산돼 있어야 합니다.
 
 # 인벤토리에 미리 등록 안 해도, IP만으로 임시 호스트를 만들어 씁니다.
-# ansible_user/ssh key/ProxyCommand는 hosts.ini의 [all:vars]에서 자동 상속됩니다.
 - name: Register the new worker as a temporary inventory host
   run_once: true
   delegate_to: localhost
   add_host:
     name: scaleout_new_worker
-    ansible_host: "{{ worker_ip }}"
+    ansible_host: "{{ hostvars['localhost'].worker_ip }}"
 
 - name: Get worker join token from the leader
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
@@ -151,6 +152,6 @@
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   debug:
     msg: >-
-      워커({{ worker_ip }}) 조인 완료 (role=was),
+      워커({{ hostvars['localhost'].worker_ip }}) 조인 완료 (role=was),
       {{ stack_service_name }} replicas →
       {{ updated_stack_yaml.services[stack_service_name].deploy.replicas }}

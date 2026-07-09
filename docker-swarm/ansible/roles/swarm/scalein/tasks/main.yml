@@ -2,54 +2,121 @@
 # 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname
 # 이 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
 #
-# 인스턴스가 이미 삭제됐다는 전제라 SSH로 접근할 방법이 없으므로,
-# "어떤 노드가 삭제됐는지"는 사람이 지정하지 않고 리더에서
-# docker node ls로 Status=Down인 워커를 찾아 자동 판별합니다.
+# 사람이 IP/이름을 지정하지 않고, 현재 떠 있는 워커 중 하나를
+# (번호가 가장 큰 = 가장 최근에 생성된 swarm-workerN) 자동으로 골라
+# OpenStack 인스턴스 삭제 -> 스웜 제거 -> LB 제거 -> replicas 감소까지 수행합니다.
 
-- name: Find worker nodes and their status
+- name: List current worker nodes (ID and hostname)
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   become: true
   command: >
-    docker node ls --filter role=worker --format '{% raw %}{{.ID}} {{.Status}}{% endraw %}'
-  register: worker_status_result
+    docker node ls --filter role=worker --format '{% raw %}{{.ID}} {{.Hostname}}{% endraw %}'
+  register: worker_list_result
   changed_when: false
 
-- name: Extract IDs of down workers
-  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
-  set_fact:
-    down_worker_ids: >-
-      {{
-        worker_status_result.stdout_lines
-        | select('search', 'Down')
-        | map('split', ' ')
-        | map('first')
-        | list
-      }}
-
-- name: Fail if no down worker was found (nothing to scale in)
+- name: Fail if no worker nodes exist (nothing to scale in)
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   assert:
     that:
-      - down_worker_ids | length > 0
+      - worker_list_result.stdout_lines | length > 0
+    fail_msg: "제거할 worker 노드가 없습니다."
+
+- name: Build worker ID/hostname map, keep only swarm-workerN pattern
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    worker_candidates: >-
+      {{
+        worker_list_result.stdout_lines
+        | map('split', ' ')
+        | selectattr('1', 'match', '^swarm-worker[0-9]+$')
+        | list
+      }}
+
+- name: Fail if no swarm-workerN instance found
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  assert:
+    that:
+      - hostvars['localhost'].worker_candidates | length > 0
     fail_msg: >-
-      Down 상태의 worker 노드를 찾지 못했습니다.
-      인스턴스가 정말 삭제/다운됐는지 확인하세요.
+      swarm-workerN 패턴의 워커를 찾지 못했습니다.
+      (docker node ls 결과: {{ worker_list_result.stdout_lines }})
+
+# 번호가 가장 큰(=가장 최근에 만든) 워커를 자동으로 선택
+- name: Pick the worker with the highest number (most recently created)
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  delegate_to: localhost
+  delegate_facts: true
+  set_fact:
+    target_worker_id: >-
+      {{
+        (hostvars['localhost'].worker_candidates
+          | sort(attribute='1', reverse=true, case_sensitive=false)
+          )[0][0]
+      }}
+    target_worker_name: >-
+      {{
+        (hostvars['localhost'].worker_candidates
+          | sort(attribute='1', reverse=true, case_sensitive=false)
+          )[0][1]
+      }}
 
 - name: Print scale-in plan
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   debug:
-    msg: "제거할 down worker 노드 ID: {{ down_worker_ids }}"
+    msg: >-
+      제거할 워커: {{ hostvars['localhost'].target_worker_name }}
+      (node ID {{ hostvars['localhost'].target_worker_id }})
 
-- name: Remove the down worker node(s) from the swarm
+# 인스턴스를 먼저 지웁니다 (이때부터 SSH 접근 불가)
+- name: Delete the target worker instance from OpenStack
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.server:
+    cloud: mycloud
+    state: absent
+    name: "{{ hostvars['localhost'].target_worker_name }}"
+    wait: true
+    timeout: 300
+
+# 삭제 요청 자체는 에러 없이 끝났어도 실제로 없어졌는지 재조회로 확인합니다.
+# 여기서 확인 안 되면 이후 LB 제거 / 스웜 제거 / replicas 감소는 진행하지 않습니다.
+- name: Verify the instance no longer exists
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.server_info:
+    cloud: mycloud
+    server: "{{ hostvars['localhost'].target_worker_name }}"
+  register: verify_deleted_result
+
+- name: Fail if the instance is still present
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  assert:
+    that:
+      - verify_deleted_result.servers | length == 0
+    fail_msg: >-
+      {{ hostvars['localhost'].target_worker_name }} 인스턴스 삭제가 확인되지 않아 중단합니다.
+      상태: {{ verify_deleted_result.servers | map(attribute='status') | list }}
+    success_msg: "{{ hostvars['localhost'].target_worker_name }} 삭제 확인됨"
+
+- name: Remove the worker from the LB pool
+  delegate_to: localhost
+  when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
+  openstack.cloud.lb_member:
+    cloud: mycloud
+    state: absent
+    name: "{{ hostvars['localhost'].target_worker_name }}"
+    pool: "1685b950-c1fc-4878-8a3e-56b3dc87e819"
+
+- name: Remove the worker node from the swarm
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   become: true
-  command: docker node rm --force {{ item }}
-  loop: "{{ down_worker_ids }}"
-  register: node_rm_result
+  command: docker node rm --force {{ hostvars['localhost'].target_worker_id }}
   changed_when: true
 
 # stack 파일을 구조적으로 읽고, replicas만 안전하게 -1 해서 다시 씀
-# 원본(source of truth)은 서버가 아니라 Ansible 저장소 안의 파일입니다.
 - name: Read current stack file from the Ansible repo
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   delegate_to: localhost
@@ -113,5 +180,7 @@
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   debug:
     msg: >-
-      down 노드 제거 완료, {{ stack_service_name }} replicas →
+      {{ hostvars['localhost'].target_worker_name }} 삭제 완료
+      (인스턴스 + LB member + 스웜 노드),
+      {{ stack_service_name }} replicas →
       {{ updated_stack_yaml.services[stack_service_name].deploy.replicas }}
