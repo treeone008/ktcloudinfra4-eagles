@@ -1,27 +1,29 @@
 - targets:
-    - 192.168.100.20:8080
+    - 192.168.1.20:8080
   labels:
-    node: swarm-mg
-    role: swarm-manager
+    node: web1
+    role: web
     layer: openstack-instance
 
 - targets:
-    - 192.168.100.21:8080
+    - 192.168.1.21:8080
   labels:
-    node: swarm-mg2
-    role: swarm-manager
+    node: web2
+    role: web
     layer: openstack-instance
 
 - targets:
-    - 192.168.100.22:8080
+    - 192.168.1.22:8080
   labels:
-    node: swarm-mg3
-    role: swarm-manager
+    node: web3
+    role: web
     layer: openstack-instance
 
-#- targets:
-#    - 192.168.100.23:8080
-#  labels:
-#    node: worker-01
-#    role: swarm-worker
-#    layer: openstack-instance
+# Heat workers — cadvisor :8080 (max 3)
+- targets:
+    - 192.168.1.23:8080
+    - 192.168.1.24:8080
+    - 192.168.1.25:8080
+  labels:
+    role: swarm-worker
+    layer: openstack-instance

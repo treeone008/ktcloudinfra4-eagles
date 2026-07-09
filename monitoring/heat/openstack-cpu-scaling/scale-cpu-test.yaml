@@ -1,0 +1,207 @@
+heat_template_version: 2018-08-31
+
+description: >
+  Swarm Worker Auto Scaling (Heat parameter mode).
+  Managers: web1~web3 (192.168.1.20~22) — Heat 밖, 사전 구성.
+  Workers: 192.168.1.23~25 — worker_count(0~3)로 Scale-Out/In.
+  Network: webserver 192.168.1.0/24
+
+parameters:
+  network:
+    type: string
+    description: webserver network UUID
+  subnet:
+    type: string
+    description: 192.168.1.0/24 subnet UUID
+  image:
+    type: string
+    description: Ubuntu cloud image (openstack image list)
+  flavor:
+    type: string
+    default: m1.small
+  key_name:
+    type: string
+    description: openstack keypair name
+  ssh_public_key:
+    type: string
+    description: openstack keypair show <name> --public-key (one line)
+
+  gateway:
+    type: string
+    default: 192.168.1.1
+  monitor_cidr:
+    type: string
+    default: 172.16.8.0/24
+  web_cidr:
+    type: string
+    default: 192.168.1.0/24
+  worker_count:
+    type: number
+    default: 0
+    constraints:
+      - range: { min: 0, max: 3 }
+
+conditions:
+  worker_ge_1:
+    or:
+      - { equals: [{ get_param: worker_count }, 1] }
+      - { equals: [{ get_param: worker_count }, 2] }
+      - { equals: [{ get_param: worker_count }, 3] }
+  worker_ge_2:
+    or:
+      - { equals: [{ get_param: worker_count }, 2] }
+      - { equals: [{ get_param: worker_count }, 3] }
+  worker_ge_3:
+    equals: [{ get_param: worker_count }, 3]
+
+resources:
+  worker_secgrp:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: swarm-worker-sg-%stack_name%
+          params:
+            stack_name: { get_param: "OS::stack_name" }
+      rules:
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 9100
+          port_range_max: 9100
+          remote_ip_prefix: { get_param: monitor_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 8080
+          port_range_max: 8080
+          remote_ip_prefix: { get_param: monitor_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 22
+          port_range_max: 22
+          remote_ip_prefix: { get_param: monitor_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 2377
+          port_range_max: 2377
+          remote_ip_prefix: { get_param: web_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: tcp
+          port_range_min: 7946
+          port_range_max: 7946
+          remote_ip_prefix: { get_param: web_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: udp
+          port_range_min: 4789
+          port_range_max: 4789
+          remote_ip_prefix: { get_param: web_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: udp
+          port_range_min: 7946
+          port_range_max: 7946
+          remote_ip_prefix: { get_param: web_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: icmp
+          remote_ip_prefix: { get_param: web_cidr }
+        - direction: ingress
+          ethertype: IPv4
+          protocol: icmp
+          remote_ip_prefix: { get_param: monitor_cidr }
+
+  worker_w01:
+    type: OS::Nova::Server
+    condition: worker_ge_1
+    properties:
+      name: worker-01
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: worker_secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.1.23
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.1.23"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+            __SWARM_MANAGER_IP__: "192.168.1.20"
+
+  worker_w02:
+    type: OS::Nova::Server
+    condition: worker_ge_2
+    properties:
+      name: worker-02
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: worker_secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.1.24
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.1.24"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+            __SWARM_MANAGER_IP__: "192.168.1.20"
+
+  worker_w03:
+    type: OS::Nova::Server
+    condition: worker_ge_3
+    properties:
+      name: worker-03
+      image: { get_param: image }
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      config_drive: true
+      security_groups:
+        - { get_resource: worker_secgrp }
+      networks:
+        - network: { get_param: network }
+          subnet: { get_param: subnet }
+          fixed_ip: 192.168.1.25
+      user_data_format: RAW
+      user_data:
+        str_replace:
+          template: { get_file: userdata/ubuntu-worker-cloud-config.yaml }
+          params:
+            __NODE_IP__: "192.168.1.25"
+            __NODE_GW__: { get_param: gateway }
+            __SSH_PUBKEY__: { get_param: ssh_public_key }
+            __SWARM_MANAGER_IP__: "192.168.1.20"
+
+outputs:
+  swarm_managers:
+    description: Heat 밖 — web1~web3 Manager (사전 구성)
+    value:
+      - 192.168.1.20
+      - 192.168.1.21
+      - 192.168.1.22
+  worker_count:
+    value: { get_param: worker_count }
+  worker_ips:
+    description: 고정 IP worker 슬롯 (.23~.25)
+    value:
+      - 192.168.1.23
+      - 192.168.1.24
+      - 192.168.1.25

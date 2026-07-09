@@ -1,0 +1,6 @@
+# DEPRECATED — Manager VM용 (swarm-mg / 192.168.100.20)
+
+현재 환경에서는 **web1~web3 (192.168.1.20~22)** 가 Swarm Manager 역할.
+Heat 템플릿 `scale-cpu-test.yaml` 은 **Worker만** 생성합니다.
+
+이 파일은 참고용으로만 보관합니다.

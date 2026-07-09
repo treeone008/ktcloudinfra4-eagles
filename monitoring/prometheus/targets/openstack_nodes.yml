@@ -1,5 +1,6 @@
 # =========================
 # OpenStack infra / host nodes
+# all-in-one: 172.16.8.100 | monitoring stack: mgmt 172.16.8.200
 # =========================
 
 - targets:
@@ -12,69 +13,57 @@
 - targets:
     - 172.16.8.100:9100
   labels:
-    node: controll
-    role: controller
+    node: allinone
+    role: allinone
     layer: openstack-host
-
-- targets:
-    - 172.16.8.101:9100
-  labels:
-    node: network
-    role: network
-    layer: openstack-host
-
-- targets:
-    - 172.16.8.102:9100
-  labels:
-    node: storage
-    role: storage
-    layer: openstack-host
-
-- targets:
-    - 172.16.8.103:9100
-  labels:
-    node: compute1
-    role: compute
-    layer: openstack-host
-
-- targets:
-    - 172.16.8.104:9100
-  labels:
-    node: compute2
-    role: compute
-    layer: openstack-host
-
-- targets:
-    - 172.16.8.110:9100
-  labels:
-    node: monitor
-    role: monitoring
-    layer: external-monitoring
 
 
 # =========================
-# OpenStack instances
+# OpenStack instances - Web / Swarm
+# webserver subnet: 192.168.1.0/24
 # =========================
 
 - targets:
-    - 192.168.100.20:9100
+    - 192.168.1.20:9100
   labels:
-    node: swarm-mg
-    role: swarm-manager
+    node: web1
+    role: web
     layer: openstack-instance
 
 - targets:
-    - 192.168.100.21:9100
+    - 192.168.1.21:9100
   labels:
-    node: swarm-mg2
-    role: swarm-manager
+    node: web2
+    role: web
     layer: openstack-instance
 
 - targets:
-    - 192.168.100.22:9100
+    - 192.168.1.22:9100
   labels:
-    node: swarm-mg3
-    role: swarm-manager
+    node: web3
+    role: web
+    layer: openstack-instance
+
+# Heat Swarm workers (192.168.1.23~27, worker_count 1~5)
+- targets:
+    - 192.168.1.23:9100
+  labels:
+    node: worker-01
+    role: swarm-worker
+    layer: openstack-instance
+
+- targets:
+    - 192.168.1.24:9100
+  labels:
+    node: worker-02
+    role: swarm-worker
+    layer: openstack-instance
+
+- targets:
+    - 192.168.1.25:9100
+  labels:
+    node: worker-03
+    role: swarm-worker
     layer: openstack-instance
 
 

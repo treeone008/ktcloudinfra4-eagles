@@ -18,7 +18,42 @@ route:
   group_interval: 1m
   repeat_interval: 4h
 
+  routes:
+    - match:
+        action: scale_up
+      receiver: heat-scale-up
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: true
+
+    - match:
+        action: scale_down
+      receiver: heat-scale-down
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: true
+
+    # continue:true는 sibling만 탐색 → scale 알람도 Gmail/Slack 보내려면 별도 route
+    - match_re:
+        action: scale_up|scale_down
+      receiver: team-alert-receiver
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+
 receivers:
+  - name: heat-scale-up
+    webhook_configs:
+      - url: http://172.16.8.200:8080/scale/up
+        send_resolved: false
+
+  - name: heat-scale-down
+    webhook_configs:
+      - url: http://172.16.8.200:8080/scale/down
+        send_resolved: false
+
   - name: team-alert-receiver
     email_configs:
       - to: treeone898@gmail.com

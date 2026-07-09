@@ -1,0 +1,43 @@
+groups:
+  - name: heat_cpu_scaling
+    rules:
+      - record: swarm:manager_cpu_usage:percent
+        expr: |
+          100 - (
+            avg(
+              irate(node_cpu_seconds_total{
+                job="swarm_nodes",
+                role="swarm-manager",
+                mode="idle"
+              }[2m])
+            ) * 100
+          )
+
+      - record: swarm:worker_count
+        expr: |
+          count(up{job="swarm_nodes", role="swarm-worker"} == 1)
+
+      - alert: SwarmWorkerScaleUp
+        expr: swarm:manager_cpu_usage:percent > 80
+        for: 2m
+        labels:
+          severity: warning
+          action: scale_up
+        annotations:
+          summary: "Swarm manager CPU high — add worker"
+          description: "web1~3 avg CPU {{ $value | printf \"%.1f\" }}% > 80% for 2m"
+
+      - record: swarm:manager_cpu_usage:percent:avg5m
+        expr: avg_over_time(swarm:manager_cpu_usage:percent[5m])
+
+      - alert: SwarmWorkerScaleDown
+        expr: |
+          swarm:manager_cpu_usage:percent:avg5m < 40
+          and swarm:worker_count >= 1
+        for: 1m
+        labels:
+          severity: info
+          action: scale_down
+        annotations:
+          summary: "Swarm manager CPU low — remove worker"
+          description: "web1~3 avg CPU avg5m {{ $value | printf \"%.1f\" }}% < 40%, worker>=1 → scale down (min 0)"
