@@ -18,7 +18,6 @@
       --mount type=bind,src=/var/lib/docker/,dst=/var/lib/docker,ro \
       --mount type=bind,src=/dev/disk/,dst=/dev/disk,ro \
       --publish published=8080,target=8080,mode=host \
-      google/cadvisor:latest
+      gcr.io/cadvisor/cadvisor:v0.49.1
   when: cadvisor_check.rc != 0  # 💡 서비스가 없을 때만 최초 1회 실행
   delegate_to: swarm-mg         # 💡 오직 swarm-mg(리더)에서만 실행되도록 강제 위임
-
