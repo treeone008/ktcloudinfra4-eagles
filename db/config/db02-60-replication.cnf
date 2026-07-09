@@ -1,0 +1,9 @@
+[mysqld]
+server_id=2
+bind-address=0.0.0.0
+log_bin=mysql-bin
+relay_log=relay-bin
+binlog_format=ROW
+gtid_strict_mode=ON
+log_slave_updates=ON
+read_only=ON

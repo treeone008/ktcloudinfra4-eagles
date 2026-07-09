@@ -1,0 +1,21 @@
+db01
+TARGET         SOURCE   FSTYPE OPTIONS
+/var/lib/mysql /dev/vdb ext4   rw,relatime
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/vdb       ext4   20G  125M   19G   1% /var/lib/mysql
+NAME    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+vda     253:0    0   20G  0 disk 
+├─vda1  253:1    0   19G  0 part /
+├─vda14 253:14   0    4M  0 part 
+├─vda15 253:15   0  106M  0 part /boot/efi
+└─vda16 259:0    0  913M  0 part /boot
+vdb     253:16   0   20G  0 disk /var/lib/mysql
+@@hostname	@@server_id	@@read_only
+db01	1	0
+Database
+#mysql50#lost+found
+appdb
+information_schema
+mysql
+performance_schema
+sys

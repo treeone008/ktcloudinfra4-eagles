@@ -1,0 +1,39 @@
+# OpenStack DB Resource Summary
+
+## Network
+
+- DB Network: db-net
+- DB Subnet: 192.168.101.0/24
+- Gateway: 192.168.101.1
+- Router: ROUTER1
+
+## Instances
+
+| Name | Role | Internal IP | Floating IP |
+|---|---|---:|---:|
+| db01 | MariaDB Primary | 192.168.101.31 | 172.16.8.190 |
+| db02 | MariaDB Replica | 192.168.101.32 | 172.16.8.121 |
+| db-proxy-01 | MaxScale / Pacemaker | 192.168.101.40 | 172.16.8.169 |
+| db-proxy-02 | MaxScale / Pacemaker | 192.168.101.41 | 172.16.8.119 |
+
+## Cinder Volumes
+
+| Volume | Attached To | Device | Mount Point |
+|---|---|---|---|
+| db01-data-vol | db01 | /dev/vdb | /var/lib/mysql |
+| db02-data-vol | db02 | /dev/vdb | /var/lib/mysql |
+
+## VIP
+
+- VIP: 192.168.101.50
+- Port: 4006
+- Managed by: Pacemaker
+- Service: MaxScale
+
+## Application DB Endpoint
+
+DB_HOST=192.168.101.50
+DB_PORT=4006
+DB_NAME=appdb
+DB_USER=appuser
+DB_PASSWORD=<APP_DB_PASSWORD>
