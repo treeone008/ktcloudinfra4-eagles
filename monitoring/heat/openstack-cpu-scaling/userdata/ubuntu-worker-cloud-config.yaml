@@ -1,0 +1,75 @@
+#cloud-config
+# Heat str_replace: __NODE_IP__ __NODE_GW__ __SSH_PUBKEY__ __SWARM_MANAGER_IP__
+
+ssh_pwauth: true
+chpasswd:
+  list: |
+    ubuntu:ubuntu
+  expire: false
+
+ssh_authorized_keys:
+  - __SSH_PUBKEY__
+
+network:
+  version: 2
+  ethernets:
+    primary:
+      match:
+        name: "en*"
+      dhcp4: false
+      addresses:
+        - __NODE_IP__/24
+      routes:
+        - to: default
+          via: __NODE_GW__
+      nameservers:
+        addresses: [8.8.8.8, 1.1.1.1]
+
+package_update: true
+packages:
+  - curl
+  - wget
+  - docker.io
+  - prometheus-node-exporter
+
+write_files:
+  - path: /usr/local/bin/start-cadvisor.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -e
+      if docker ps -a | grep -q '[c]advisor'; then
+        exit 0
+      fi
+      docker rm -f cadvisor 2>/dev/null || true
+      docker run -d \
+        --name=cadvisor \
+        --restart=unless-stopped \
+        --volume=/:/rootfs:ro \
+        --volume=/var/run:/var/run:ro \
+        --volume=/sys:/sys:ro \
+        --volume=/var/lib/docker/:/var/lib/docker:ro \
+        --publish=8080:8080 \
+        gcr.io/cadvisor/cadvisor:v0.49.1
+
+  - path: /usr/local/bin/swarm-worker-join.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Manager join token은 Ansible 또는 수동으로 /run/swarm-token 에 넣은 뒤 실행
+      MANAGER="__SWARM_MANAGER_IP__"
+      TOKEN_FILE=/run/swarm-token
+      if [[ ! -f "$TOKEN_FILE" ]]; then
+        echo "skip join: $TOKEN_FILE not found (run Ansible or place token manually)"
+        exit 0
+      fi
+      TOKEN=$(cat "$TOKEN_FILE")
+      docker swarm join --token "$TOKEN" "${MANAGER}:2377" || true
+
+runcmd:
+  - systemctl enable --now docker
+  - systemctl enable --now prometheus-node-exporter
+  - /usr/local/bin/start-cadvisor.sh
+  - sleep 30
+  - /usr/local/bin/swarm-worker-join.sh
+  - echo ok > /var/log/swarm-worker-cloud-init.done

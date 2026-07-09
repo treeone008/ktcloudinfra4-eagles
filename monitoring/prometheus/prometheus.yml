@@ -53,3 +53,9 @@ scrape_configs:
       - files:
           - /etc/prometheus/targets/maxscale.yml
         refresh_interval: 30s
+
+  - job_name: swarm_nodes
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/swarm_nodes.yml
+        refresh_interval: 30s
