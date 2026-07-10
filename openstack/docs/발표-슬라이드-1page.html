@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenStack IaaS — 김현도</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #141c28;
+      --panel: #1c2738;
+      --line: #2a3a52;
+      --teal: #2dd4bf;
+      --teal-dim: rgba(45, 212, 191, 0.14);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --soft: #cbd5e1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: #0b1018;
+      display: grid;
+      place-items: center;
+      font-family: "IBM Plex Sans KR", system-ui, sans-serif;
+      color: var(--text);
+    }
+    .slide {
+      width: min(96vw, 1280px);
+      aspect-ratio: 16 / 9;
+      background:
+        radial-gradient(ellipse 80% 60% at 100% 0%, rgba(45, 212, 191, 0.08), transparent 55%),
+        radial-gradient(ellipse 50% 40% at 0% 100%, rgba(56, 120, 180, 0.12), transparent 50%),
+        linear-gradient(160deg, #121a26 0%, #1a2434 55%, #152030 100%);
+      border: 1px solid var(--line);
+      padding: 3.2% 4%;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 3.2%;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      opacity: 0.35;
+    }
+    header, main, footer { position: relative; z-index: 1; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 1.4%;
+    }
+    .brand {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: clamp(0.75rem, 1.3vw, 0.95rem);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--teal);
+    }
+    h1 {
+      font-family: Outfit, sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.6rem, 3.4vw, 2.55rem);
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-top: 0.35rem;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: clamp(0.72rem, 1.25vw, 0.95rem);
+      margin-top: 0.45rem;
+      font-weight: 500;
+    }
+    .badge {
+      align-self: center;
+      background: var(--teal-dim);
+      color: var(--teal);
+      border: 1px solid rgba(45, 212, 191, 0.35);
+      padding: 0.55rem 0.9rem;
+      font-size: clamp(0.7rem, 1.15vw, 0.85rem);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 3.5%;
+      min-height: 0;
+    }
+    .panel {
+      background: rgba(28, 39, 56, 0.72);
+      border: 1px solid var(--line);
+      padding: 5.5% 6%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .panel h2 {
+      font-family: Outfit, sans-serif;
+      font-size: clamp(0.85rem, 1.4vw, 1.05rem);
+      font-weight: 700;
+      color: var(--soft);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .panel h2::before {
+      content: "";
+      width: 0.45rem;
+      height: 0.45rem;
+      background: var(--teal);
+    }
+    .nodes {
+      list-style: none;
+      display: grid;
+      gap: 0.42rem;
+      margin-top: 0.2rem;
+    }
+    .nodes li {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr;
+      gap: 0.6rem;
+      font-size: clamp(0.72rem, 1.2vw, 0.92rem);
+      padding: 0.28rem 0;
+      border-bottom: 1px solid rgba(42, 58, 82, 0.55);
+    }
+    .nodes li:last-child { border-bottom: none; }
+    .nodes .ip {
+      font-family: Outfit, sans-serif;
+      color: var(--teal);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .nodes .role { color: var(--muted); }
+    .proofs {
+      display: grid;
+      grid-template-rows: repeat(3, 1fr);
+      gap: 0.7rem;
+      flex: 1;
+    }
+    .card {
+      background: rgba(20, 28, 40, 0.65);
+      border-left: 3px solid var(--teal);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--teal);
+      padding: 0.7rem 0.9rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.2rem;
+    }
+    .card strong {
+      font-family: Outfit, sans-serif;
+      font-size: clamp(0.95rem, 1.55vw, 1.2rem);
+      font-weight: 700;
+    }
+    .card span {
+      color: var(--muted);
+      font-size: clamp(0.68rem, 1.1vw, 0.82rem);
+      line-height: 1.35;
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      padding-top: 1.2%;
+      color: var(--muted);
+      font-size: clamp(0.65rem, 1.1vw, 0.8rem);
+    }
+    footer b { color: var(--soft); font-weight: 600; }
+    .hint {
+      position: fixed;
+      bottom: 10px;
+      right: 14px;
+      color: #64748b;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <section class="slide" aria-label="OpenStack 발표 1페이지">
+    <header>
+      <div>
+        <div class="brand">OpenStack · IaaS</div>
+        <h1>멀티노드 OpenStack 구축</h1>
+        <p class="sub">VMware · Kolla-Ansible 2025.1 · Ubuntu 24.04 · 김현도</p>
+      </div>
+      <div class="badge">검증 완료 · Tenant 10/10</div>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>인프라 7노드</h2>
+        <ul class="nodes">
+          <li><span class="ip">.200</span><span class="role">mgmt — 관리 / ProxyJump</span></li>
+          <li><span class="ip">.100</span><span class="role">control — API / Horizon VIP .105</span></li>
+          <li><span class="ip">.101</span><span class="role">network — L3 / DHCP / OVS</span></li>
+          <li><span class="ip">.102</span><span class="role">storage — Cinder LVM</span></li>
+          <li><span class="ip">.103–.106</span><span class="role">compute ×3 — Nova</span></li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>핵심 증명</h2>
+        <div class="proofs">
+          <div class="card">
+            <strong>Tenant 10 ACTIVE</strong>
+            <span>swarm / db / proxy / lb / automation · public·private 이중망</span>
+          </div>
+          <div class="card">
+            <strong>Anti-affinity · 분산</strong>
+            <span>db·swarm server group · compute 3대 배치</span>
+          </div>
+          <div class="card">
+            <strong>FIP · Cinder · SG</strong>
+            <span>.219 / .243 · db 볼륨 in-use · project-sg</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div><b>시연 컷</b> · Horizon Topology · CLI server/compute/volume</div>
+      <div>실시연 = 강사 AIO · Swarm scale은 담당 파트</div>
+    </footer>
+  </section>
+  <p class="hint">브라우저에서 F11 → 전체화면 · 캡처하면 PPT 1장으로 사용</p>
+</body>
+</html>
