@@ -1,130 +1,151 @@
 <mxfile host="app.diagrams.net" agent="Cursor" version="24.7.17" type="device">
-  <diagram id="final-arch" name="최종 목표">
-    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+  <diagram id="final-goal-exact" name="최종 목표">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
+        <!-- ========== Outer green frame ========== -->
+        <mxCell id="outer" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;strokeWidth=3;" parent="1" vertex="1">
+          <mxGeometry x="30" y="30" width="1180" height="980" as="geometry" />
+        </mxCell>
+
         <!-- Title -->
-        <mxCell id="title" value="프로젝트 구조도 — 최종 목표&#xa;(mgmt / DB 는 서비스 네트워크 밖)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1a2332;" parent="1" vertex="1">
-          <mxGeometry x="40" y="20" width="520" height="50" as="geometry" />
+        <mxCell id="title" value="최종 목표" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#1a1a1a;" parent="1" vertex="1">
+          <mxGeometry x="480" y="40" width="200" height="36" as="geometry" />
         </mxCell>
 
-        <!-- ========== Octavia (top) ========== -->
-        <mxCell id="octavia" value="Octavia + Floating IP&#xa;(외부 진입점)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=14;align=center;" parent="1" vertex="1">
-          <mxGeometry x="520" y="90" width="280" height="60" as="geometry" />
+        <!-- ========== Octavia top ========== -->
+        <mxCell id="octavia" value="Octavia + Floating IP" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;strokeWidth=1;fontStyle=1;fontSize=14;align=center;" parent="1" vertex="1">
+          <mxGeometry x="420" y="90" width="340" height="44" as="geometry" />
         </mxCell>
 
-        <!-- ========== mgmt (OUTSIDE left) ========== -->
-        <mxCell id="mgmt-group" value="mgmt (관리 영역) — 서비스 네트워크 밖" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=36;fillColor=#fff2cc;strokeColor=#d6b656;rounded=1;fontSize=13;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;" parent="1" vertex="1">
-          <mxGeometry x="40" y="180" width="300" height="280" as="geometry" />
-        </mxCell>
-        <mxCell id="swarm-cp" value="Docker Swarm Control Plane&#xa;(Manager 3대 · Control Plane 전용)&#xa;&#xa;manager-01 (Control)&#xa;manager-02 (Control)&#xa;manager-03 (Control)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff9e6;strokeColor=#d6b656;fontSize=12;align=center;spacing=6;" parent="mgmt-group" vertex="1">
-          <mxGeometry y="36" width="300" height="130" as="geometry" />
-        </mxCell>
-        <mxCell id="monitor" value="모니터링 (monitor-01)&#xa;&#xa;Prometheus · Grafana · Alertmanager&#xa;(Heat Scale 알람 → Slack / Gmail)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff9e6;strokeColor=#d6b656;fontSize=12;align=center;spacing=6;" parent="mgmt-group" vertex="1">
-          <mxGeometry y="166" width="300" height="114" as="geometry" />
+        <!-- ========== OpenStack Project (blue) ========== -->
+        <mxCell id="project" value="OpenStack Project (서비스 네트워크)" style="swimlane;fontStyle=1;startSize=32;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;rounded=0;fontSize=14;collapsible=0;horizontal=1;" parent="1" vertex="1">
+          <mxGeometry x="60" y="160" width="1120" height="620" as="geometry" />
         </mxCell>
 
-        <!-- ========== OpenStack Project (CENTER — workers only) ========== -->
-        <mxCell id="svc-net" value="OpenStack Project (서비스 네트워크)&#xa;※ Worker + Auto Scaling 만" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=48;fillColor=#e1d5e7;strokeColor=#9673a6;rounded=1;fontSize=13;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;" parent="1" vertex="1">
-          <mxGeometry x="380" y="180" width="440" height="280" as="geometry" />
+        <!-- --- Swarm Control Plane (green) --- -->
+        <mxCell id="swarm-box" value="Docker Swarm Control Plane (Manager 3대) [Control Plane 전용]" style="swimlane;fontStyle=1;startSize=28;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="20" y="50" width="680" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="workers" value="Worker 노드 (Web / WAS 운영)&#xa;&#xa;worker-01 · worker-02 · … · worker-n&#xa;(Heat Scale-out 시 증가)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f0f7;strokeColor=#9673a6;fontSize=12;align=center;spacing=6;" parent="svc-net" vertex="1">
-          <mxGeometry y="48" width="440" height="110" as="geometry" />
+        <mxCell id="mgr1" value="manager-01&#xa;Manager (Control)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=center;" parent="swarm-box" vertex="1">
+          <mxGeometry x="30" y="45" width="180" height="65" as="geometry" />
         </mxCell>
-        <mxCell id="autoscaling" value="Worker Auto Scaling&#xa;&#xa;Aodh (모니터링) + Heat / Senlin&#xa;Scale-out (확장)  ↔  Scale-in (축소)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f0f7;strokeColor=#9673a6;fontSize=12;align=center;spacing=6;" parent="svc-net" vertex="1">
-          <mxGeometry y="158" width="440" height="122" as="geometry" />
+        <mxCell id="mgr2" value="manager-02&#xa;Manager (Control)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=center;" parent="swarm-box" vertex="1">
+          <mxGeometry x="250" y="45" width="180" height="65" as="geometry" />
         </mxCell>
-
-        <!-- ========== DB (OUTSIDE right) ========== -->
-        <mxCell id="db-group" value="DB (데이터 영역) — 서비스 네트워크 밖" style="swimlane;fontStyle=1;childLayout=stackLayout;horizontal=1;startSize=36;fillColor=#d5e8d4;strokeColor=#82b366;rounded=1;fontSize=13;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;" parent="1" vertex="1">
-          <mxGeometry x="860" y="180" width="320" height="280" as="geometry" />
-        </mxCell>
-        <mxCell id="db-proxy" value="DB Proxy (MaxScale)&#xa;VIP / DNS : db.internal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf5ea;strokeColor=#82b366;fontSize=12;align=center;spacing=4;" parent="db-group" vertex="1">
-          <mxGeometry y="36" width="320" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="mariadb" value="Database (MariaDB)&#xa;&#xa;db01 Primary (본기)  ↔  db02 Replica (부기)&#xa;GTID 복제&#xa;&#xa;Order Volume (DB 데이터 볼륨) ×2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf5ea;strokeColor=#82b366;fontSize=12;align=center;spacing=4;" parent="db-group" vertex="1">
-          <mxGeometry y="96" width="320" height="110" as="geometry" />
-        </mxCell>
-        <mxCell id="db-recovery" value="DB 자동복구 (MaxScale + Ansible)&#xa;장애 감지 · Failover · Replication 재구성 · Auto Recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf5ea;strokeColor=#82b366;fontSize=11;align=center;spacing=4;" parent="db-group" vertex="1">
-          <mxGeometry y="206" width="320" height="74" as="geometry" />
+        <mxCell id="mgr3" value="manager-03&#xa;Manager (Control)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;align=center;" parent="swarm-box" vertex="1">
+          <mxGeometry x="470" y="45" width="180" height="65" as="geometry" />
         </mxCell>
 
-        <!-- ========== OpenStack IaaS (bottom) ========== -->
-        <mxCell id="iaas" value="OpenStack IaaS (공용 노드)" style="swimlane;fontStyle=1;horizontal=1;startSize=36;fillColor=#f5f5f5;strokeColor=#666666;rounded=1;fontSize=13;collapsible=0;" parent="1" vertex="1">
-          <mxGeometry x="40" y="520" width="1140" height="160" as="geometry" />
+        <!-- --- Monitoring (blue, right) --- -->
+        <mxCell id="mon-box" value="모니터링 (monitor-01)" style="swimlane;fontStyle=1;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="740" y="50" width="340" height="200" as="geometry" />
         </mxCell>
-        <mxCell id="n-ctrl" value="Controller&#xa;(API / Horizon)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="20" y="50" width="160" height="90" as="geometry" />
+        <mxCell id="prom" value="Prometheus" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=12;align=center;" parent="mon-box" vertex="1">
+          <mxGeometry x="40" y="45" width="260" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="n-net" value="Network&#xa;(L3 / DHCP / OVS)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="200" y="50" width="160" height="90" as="geometry" />
+        <mxCell id="graf" value="Grafana" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=12;align=center;" parent="mon-box" vertex="1">
+          <mxGeometry x="40" y="95" width="260" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="n-sto" value="Storage&#xa;(Cinder LVM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="380" y="50" width="160" height="90" as="geometry" />
-        </mxCell>
-        <mxCell id="n-c1" value="Compute 1&#xa;(Nova)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="560" y="50" width="160" height="90" as="geometry" />
-        </mxCell>
-        <mxCell id="n-c2" value="Compute 2&#xa;(Nova)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="740" y="50" width="160" height="90" as="geometry" />
-        </mxCell>
-        <mxCell id="n-c3" value="Compute 3&#xa;(Nova)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
-          <mxGeometry x="920" y="50" width="160" height="90" as="geometry" />
+        <mxCell id="alert" value="Alertmanager" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=12;align=center;" parent="mon-box" vertex="1">
+          <mxGeometry x="40" y="145" width="260" height="36" as="geometry" />
         </mxCell>
 
-        <!-- ========== Edges ========== -->
-        <!-- Octavia -> Workers -->
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#6c8ebf;endArrow=block;endFill=1;" parent="1" source="octavia" target="workers" edge="1">
-          <mxGeometry relative="1" as="geometry" />
+        <!-- --- Worker nodes (blue) --- -->
+        <mxCell id="worker-box" value="Worker 노드 (Web/WAS 운영)" style="swimlane;fontStyle=1;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="20" y="200" width="680" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="e1l" value="HTTP/HTTPS" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#6c8ebf;" parent="e1" vertex="1" connectable="0">
-          <mxGeometry x="-0.1" relative="1" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
+        <mxCell id="w1" value="worker-01&#xa;Web/WAS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=center;" parent="worker-box" vertex="1">
+          <mxGeometry x="30" y="45" width="160" height="65" as="geometry" />
         </mxCell>
-
-        <!-- Workers -> DB Proxy -->
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;endArrow=block;endFill=1;" parent="1" source="workers" target="db-proxy" edge="1">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="w2" value="worker-02&#xa;Web/WAS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=center;" parent="worker-box" vertex="1">
+          <mxGeometry x="230" y="45" width="160" height="65" as="geometry" />
         </mxCell>
-        <mxCell id="e2l" value="DB 조회/쓰기" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#82b366;" parent="e2" vertex="1" connectable="0">
-          <mxGeometry x="-0.2" relative="1" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
+        <mxCell id="wdots" value="..." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;" parent="worker-box" vertex="1">
+          <mxGeometry x="400" y="55" width="40" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="wn" value="worker-n&#xa;Web/WAS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=center;" parent="worker-box" vertex="1">
+          <mxGeometry x="460" y="45" width="160" height="65" as="geometry" />
         </mxCell>
 
-        <!-- Monitor -> Autoscaling (metrics) -->
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d6b656;dashed=1;endArrow=block;endFill=1;" parent="1" source="monitor" target="autoscaling" edge="1">
-          <mxGeometry relative="1" as="geometry" />
+        <!-- --- DB Proxy (orange) --- -->
+        <mxCell id="dbproxy-box" value="DB Proxy (MaxScale)" style="swimlane;fontStyle=1;startSize=28;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="740" y="270" width="340" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="e3l" value="메트릭 / 알람" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b7950b;" parent="e3" vertex="1" connectable="0">
-          <mxGeometry x="-0.1" relative="1" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
+        <mxCell id="dbproxy-vip" value="VIP / DNS : db.internal" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=12;align=center;" parent="dbproxy-box" vertex="1">
+          <mxGeometry x="30" y="40" width="280" height="36" as="geometry" />
         </mxCell>
 
-        <!-- Swarm CP -> Workers (orchestration) -->
-        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d6b656;endArrow=block;endFill=1;" parent="1" source="swarm-cp" target="workers" edge="1">
-          <mxGeometry relative="1" as="geometry" />
+        <!-- --- Auto Scaling (blue) --- -->
+        <mxCell id="as-box" value="Worker Auto Scaling (Aodh + Heat/Senlin)" style="swimlane;fontStyle=1;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="20" y="350" width="500" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="e4l" value="서비스 오케스트레이션" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b7950b;" parent="e4" vertex="1" connectable="0">
-          <mxGeometry x="-0.2" relative="1" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
+        <mxCell id="scaleout" value="▲&#xa;Scale-out&#xa;(확장)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontColor=#6c8ebf;fontStyle=1;" parent="as-box" vertex="1">
+          <mxGeometry x="10" y="40" width="70" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="aodh" value="Aodh&#xa;(모니터링)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=center;" parent="as-box" vertex="1">
+          <mxGeometry x="90" y="50" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="heat" value="Heat/Senlin&#xa;(오토 스케일링)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;align=center;" parent="as-box" vertex="1">
+          <mxGeometry x="260" y="50" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="scalein" value="▼&#xa;Scale-in&#xa;(축소)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontColor=#6c8ebf;fontStyle=1;" parent="as-box" vertex="1">
+          <mxGeometry x="420" y="40" width="70" height="80" as="geometry" />
         </mxCell>
 
-        <!-- Autoscaling <-> Workers (already stacked; add note arrow via label on autoscaling) -->
-
-        <!-- Legend -->
-        <mxCell id="legend" value="범례&#xa;노랑 = mgmt (밖)&#xa;보라 = 서비스 네트워크 (Worker만)&#xa;초록 = DB (밖)&#xa;회색 = OpenStack IaaS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#999999;fontSize=11;align=left;spacingLeft=10;spacingTop=6;" parent="1" vertex="1">
-          <mxGeometry x="40" y="710" width="280" height="100" as="geometry" />
+        <!-- --- Database MariaDB (red) --- -->
+        <mxCell id="db-box" value="Database (MariaDB)" style="swimlane;fontStyle=1;startSize=28;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;rounded=0;fontSize=12;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="540" y="380" width="540" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="db01" value="db01&#xa;Primary (쓰기)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=11;align=center;" parent="db-box" vertex="1">
+          <mxGeometry x="30" y="45" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="db02" value="db02&#xa;Replica (읽기)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=11;align=center;" parent="db-box" vertex="1">
+          <mxGeometry x="320" y="45" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="gtid" value="GTID 복제 →" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontColor=#b85450;fontStyle=1;" parent="db-box" vertex="1">
+          <mxGeometry x="210" y="55" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="vol1" value="Order Volume&#xa;DB 데이터 볼륨" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;align=center;" parent="db-box" vertex="1">
+          <mxGeometry x="30" y="120" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="vol2" value="Order Volume&#xa;DB 데이터 볼륨" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;align=center;" parent="db-box" vertex="1">
+          <mxGeometry x="320" y="120" width="180" height="55" as="geometry" />
         </mxCell>
 
-        <mxCell id="note" value="수정 포인트: 기존 최종 목표에서&#xa;mgmt(Swarm Manager·모니터)와 DB(MaxScale·MariaDB)를&#xa;「OpenStack Project 서비스 네트워크」박스 밖으로 분리.&#xa;서비스 네트워크 안에는 Worker + Auto Scaling만 유지." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontColor=#666666;" parent="1" vertex="1">
-          <mxGeometry x="360" y="710" width="520" height="90" as="geometry" />
+        <!-- --- DB Auto Recovery (orange) --- -->
+        <mxCell id="dbr-box" value="DB 자동복구 솔루션 (MaxScale + Ansible)" style="swimlane;fontStyle=1;startSize=28;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;rounded=0;fontSize=11;collapsible=0;" parent="project" vertex="1">
+          <mxGeometry x="20" y="510" width="500" height="90" as="geometry" />
         </mxCell>
+        <mxCell id="dbr-list" value="- 장애 감지&#xa;- Failover 복구&#xa;- Replication 재구성&#xa;- Auto Recovery" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=11;spacingLeft=20;" parent="dbr-box" vertex="1">
+          <mxGeometry x="10" y="32" width="480" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ========== OpenStack IaaS (bottom gray) ========== -->
+        <mxCell id="iaas" value="OpenStack IaaS (공통 노드)" style="swimlane;fontStyle=1;startSize=28;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;rounded=0;fontSize=13;collapsible=0;" parent="1" vertex="1">
+          <mxGeometry x="60" y="810" width="1120" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" value="Controller Node&#xa;(Compute/Network)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="20" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" value="Network Node&#xa;(Network)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="200" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" value="Storage Node&#xa;(Block Volume)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="380" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n4" value="Compute Node 1&#xa;(DC/NV)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="560" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n5" value="Compute Node 2&#xa;(DC/NV)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="740" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n6" value="Compute Node 3&#xa;(DC/NV)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;fontSize=11;align=center;" parent="iaas" vertex="1">
+          <mxGeometry x="920" y="45" width="160" height="90" as="geometry" />
+        </mxCell>
+
       </root>
     </mxGraphModel>
   </diagram>
