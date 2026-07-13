@@ -54,6 +54,29 @@
     - name: Wait for SSH to be available
       wait_for_connection:
         timeout: "{{ restore_wait_for_connection_timeout }}"
+    
+    # - name: "[0단계] Common Configuration for All Nodes"
+    #   include_role:
+    #     name: "{{ item }}"
+    #     apply:
+    #       become: true
+    #   loop:
+    #     - common/update_cache
+    #     - common/upgrade_packages
+    #     - common/install_utilities
+    #     - common/setup_timezone
+    #     - common/sync_time
+    #     - common/ufw_settings
+    
+
+    - name: "[2단계-A] Infrastructure Metrics Agent (Node Exporter)"
+      include_role:
+        name: "{{ item }}"
+        apply:
+          become: true
+      loop:
+        - monitoring/node_exporter_install
+        - monitoring/node_exporter_service
 
     - name: Install Docker on the new worker (reuses swarm/docker role)
       become: true
