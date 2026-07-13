@@ -1,6 +1,13 @@
 ---
-# 이 role은 swarm/find-leader가 먼저 실행되어 hostvars['localhost'].swarm_leader_hostname,
-# swarm_leader_ip가 채워져 있다는 전제로 동작합니다 (site.yml에서 순서 보장).
+- name: Extract down_node_hostname from down_nodes JSON if provided
+  run_once: true
+  delegate_to: localhost
+  set_fact:
+    down_node_hostname: "{{ down_nodes[0].name }}"
+  when: 
+    - down_nodes is defined
+    - down_nodes | type_debug == 'list'
+    - down_nodes | length > 0
 
 - name: Ensure down_node_hostname is provided
   run_once: true
@@ -29,7 +36,7 @@
   delegate_to: localhost
   delegate_facts: true
 
-# 재생성된 노드를, 여전히 정상 동작 중인 클러스터에 재조인
+# 재생성된 노드를 여전히 정상 동작 중인 클러스터에 재조인
 - name: Rejoin the recreated node to the still-alive cluster
   when: inventory_hostname == down_node_hostname
   block:
@@ -71,9 +78,8 @@
       pause:
         seconds: 5
 
-    # 재조인한 노드는 다시 매니저이므로 self 조회가 가능합니다.
-    # 이 ID를 미리 확보해서, 뒤의 유령 정리 단계가 실수로
-    # 방금 재조인한 이 노드를 지우지 않도록 보호합니다.
+    # 재조인한 노드는 다시 매니저이므로 self 조회가 가능
+    # 뒤의 유령 정리 단계에서 실수로 방금 재조인한 이 노드를 지우지 않도록 보호함
     - name: Get this node's own new Docker node ID after rejoining
       become: true
       command: >
@@ -87,9 +93,7 @@
       delegate_to: localhost
       delegate_facts: true
 
-# 유령(중복) 노드 정리 — 재조인이 끝난 뒤에 실행
-# (재생성된 노드의 예전 raft 기록이 Down/Unknown 상태로 남아있고,
-#  같은 호스트명으로 새 항목이 하나 더 생겨서 중복이 발생할 수 있음)
+# 재생성된 노드의 예전 raft 기록이 Down/Unknown 상태로 남아있는 유령 노드 제거
 - name: Find hostnames that appear more than once (leftover ghosts)
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   become: true
@@ -98,9 +102,8 @@
   register: duplicate_hostnames_result
   changed_when: false
 
-# 삭제 대상에서 방금 재조인한 새 노드의 ID는 항상 제외합니다.
-# 또한 대상이 매니저 역할이면 raft 안전성 때문에 강제 삭제가 거부되므로
-# (must be demoted to worker before removal) 먼저 demote한 뒤 삭제합니다.
+# 삭제 대상에서 방금 재조인한 새 노드의 ID는 항상 제외
+# 삭제 대상은 매니저이므로 먼저 demote한 뒤 삭제
 - name: Remove non-Ready duplicate entries for each repeated hostname
   when:
     - inventory_hostname == hostvars['localhost'].swarm_leader_hostname
@@ -124,8 +127,7 @@
   register: ghost_cleanup_result
   changed_when: (ghost_cleanup_result.stdout | default('')) | trim != ''
 
-# 라벨 재확인 (이미 정상이던 노드는 값이 그대로라 무해하고,
-# 새로 조인한 노드에만 실질적으로 role=was가 새로 붙습니다)
+# 새로 조인한 노드에 role=was 붙이기
 - name: Get leader's own Docker node ID
   when: inventory_hostname == hostvars['localhost'].swarm_leader_hostname
   become: true
