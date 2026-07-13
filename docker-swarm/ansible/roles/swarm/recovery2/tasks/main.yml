@@ -1,40 +1,40 @@
 ---
-# 1. 외부 입력값을 assert 내부에서 즉시 리스트(배열)로 변환하여 실시간 검증합니다.
-- name: Ensure down_node_hostnames is provided
+- name: Ensure down_nodes list is valid for recovery2 (2 nodes down)
   run_once: true
+  delegate_to: localhost
   assert:
     that:
-      - down_node_hostnames is defined
-      # 쉼표 기준 배열 변환 후 개수가 2개인지 체크
-      - (down_node_hostnames.split(',') | length) == 2
-      # 입력된 두 노드가 인벤토리의 [swarm_managers]에 둘 다 속해 있는지 체크
-      - (down_node_hostnames.split(',') | map('trim') | list | difference(groups['swarm_managers'] | default([])) | length) == 0
+      - down_nodes is defined
+      - down_nodes | type_debug == 'list'
+      - down_nodes | length == 2
+      - (down_nodes | map(attribute='name') | list | difference(groups['swarm_managers'] | default([])) | length) == 0
     fail_msg: >-
-      -e "down_node_hostnames=swarm-mg,swarm-mg2" 형식으로 다운된 두 노드 이름을 지정하세요.
+      recovery2는 2대의 장애 노드가 리스트(down_nodes) 형태로 전달되어야 하며,
       해당 노드들은 인벤토리의 [swarm_managers] 그룹에 속해 있어야 합니다.
 
-# 2. 검증된 문자열을 기반으로 안전하게 타겟 노드 배열을 생성합니다.
 - name: Set target down nodes list
   run_once: true
+  delegate_to: localhost
   set_fact:
-    target_down_nodes: "{{ down_node_hostnames.split(',') | map('trim') | list }}"
+    target_down_nodes: "{{ down_nodes | map(attribute='name') | list }}"
+  delegate_facts: true
 
-# 3. 생존 노드(Surviving Node)를 결정합니다.
 - name: Determine the surviving node
   run_once: true
+  delegate_to: localhost
   set_fact:
-    surviving_node_hostname: "{{ (groups['swarm_managers'] | difference(target_down_nodes)) | first }}"
+    surviving_node_hostname: "{{ (groups['swarm_managers'] | difference(hostvars['localhost'].target_down_nodes)) | first }}"
+  delegate_facts: true
 
 - name: Print recovery plan
   run_once: true
   debug:
     msg: >-
-      생존 노드: {{ surviving_node_hostname }}
-      / 재생성된 노드: {{ target_down_nodes | join(', ') }}
+      생존 노드: {{ hostvars['localhost'].surviving_node_hostname }}
+      / 재생성된 노드: {{ hostvars['localhost'].target_down_nodes | join(', ') }}
 
-# 4. 생존 노드는 자기 자신의 살아있는 raft 데이터로 force-new-cluster를 실행합니다.
 - name: Recover swarm on the surviving node
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   block:
     - name: Check whether the swarm still has a reachable leader
       become: true
@@ -50,7 +50,6 @@
           - false
         fail_msg: >
           현재 노드에서 'docker node ls'가 정상 응답합니다 (쿼럼이 유지 중인 것으로 보입니다).
-          force-new-cluster는 파괴적이므로 여기서 중단합니다.
 
     - name: Force-new-cluster on the surviving node (uses its own live swarm state)
       become: true
@@ -65,21 +64,15 @@
       register: manager_join_token_result
       changed_when: false
 
-# 5. [수정] 제3자에게 위임하지 않고, 토큰을 발행한 생존 노드(자기 자신)의 방에 변수를 똑바로 저장합니다.
 - name: Share leader IP and join token globally
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   set_fact:
     new_leader_ip: "{{ ansible_host }}"
     manager_join_token: "{{ manager_join_token_result.stdout | trim }}"
 
-# 6. 새로 재생성된 매니저 노드 2대를 클러스터에 다시 조인시킵니다.
 - name: Rejoin the two recreated managers
-  when: inventory_hostname in target_down_nodes
+  when: inventory_hostname in hostvars['localhost'].target_down_nodes
   block:
-    - name: Wait for SSH to be available (instance just recreated)
-      wait_for_connection:
-        timeout: "{{ restore_wait_for_connection_timeout | default(300) }}"
-
     - name: Ensure docker is running
       become: true
       systemd:
@@ -102,19 +95,16 @@
       pause:
         seconds: 5
 
-    # [수정] 변수가 저장된 '생존 노드(surviving_node_hostname)'의 호스트 변수방에서 직접 값을 꺼내옵니다.
     - name: Join the new leader as manager
       become: true
       command: >
-        docker swarm join --token {{ hostvars[surviving_node_hostname].manager_join_token }}
-        {{ hostvars[surviving_node_hostname].new_leader_ip }}:2377
+        docker swarm join --token {{ hostvars[hostvars['localhost'].surviving_node_hostname].manager_join_token }}
+        {{ hostvars[hostvars['localhost'].surviving_node_hostname].new_leader_ip }}:2377
       register: swarm_join_result
       changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
 
-# 7. 유령(중복) 노드 정리 단계
-# 7. 유령(중복) 노드 정리 단계
 - name: Find hostnames that appear more than once (leftover ghosts)
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   shell: "docker node ls --format '{% raw %}{{.Hostname}}{% endraw %}' | sort | uniq -d"
   register: duplicate_hostnames_result
@@ -122,46 +112,38 @@
 
 - name: Remove non-Ready duplicate entries for each repeated hostname
   when:
-    - inventory_hostname == surviving_node_hostname
-    - duplicate_hostnames_result.stdout_lines | length > 0
+    - inventory_hostname == hostvars['localhost'].surviving_node_hostname
+    - duplicate_hostnames_result.stdout_lines | default([]) | length > 0
   become: true
   shell: |
-    # awk 문법 충돌을 막기 위해 쉘 변수로 item 주입
     TARGET_HOST="{{ item }}"
     
     for id in $(docker node ls --format '{% raw %}{{.ID}} {{.Hostname}} {{.Status}}{% endraw %}' | \
       awk -v h="$TARGET_HOST" '$2==h && $3!="Ready" {print $1}'); do
       
-      # 매니저 노드인지 안전하게 파싱 (Go 템플릿 에러 방지 위해 json 변환 후 grep)
       role=$(docker node inspect "$id" --format '{% raw %}{{.Spec.Role}}{% endraw %}' 2>/dev/null || echo "worker")
       
       if [ "$role" = "manager" ]; then
-        # 죽어있는 매니저는 LeaderStatus가 아예 없으므로, inspect 결과에 "Leader" 단어가 있는지 검사
         is_leader=$(docker node inspect "$id" 2>/dev/null | grep -i '"Leader": true' || echo "")
         if [ -n "$is_leader" ]; then
           echo "Skipping leader node: $id"
           continue
         fi
-        
-        # 안전하게 demote 시도 (이미 죽은 고스트 노드면 demote가 실패할 수 있으므로 실패해도 무시)
         docker node demote "$id" || true
       fi
       
-      # 최종 삭제 실행 및 결과 출력
       if docker node rm --force "$id"; then
         echo "Successfully removed ghost node: $id"
       fi
     done
   args:
     executable: /bin/bash
-  loop: "{{ duplicate_hostnames_result.stdout_lines }}"
+  loop: "{{ duplicate_hostnames_result.stdout_lines | default([]) }}"
   register: ghost_cleanup_result
-  # 실제 삭제된 노드가 있다는 로그가 찍혔을 때만 바뀐 것으로 인지
   changed_when: "'Successfully removed' in ghost_cleanup_result.stdout"
 
-# 8. Docker Swarm 노드 라벨 재적용 단계
 - name: Get surviving leader's own Docker node ID
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   command: >
     docker node inspect self --format '{% raw %}{{.ID}}{% endraw %}'
@@ -169,13 +151,14 @@
   changed_when: false
 
 - name: Label self (leader) with role=leader
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   command: docker node update --label-add role=leader {{ self_node_id_result.stdout | trim }}
-  changed_when: true
+  register: leader_label_out
+  changed_when: "'is up-to-date' not in leader_label_out.stderr"
 
 - name: List all node IDs currently in the cluster
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   command: >
     docker node ls --format '{% raw %}{{.ID}}{% endraw %}'
@@ -183,7 +166,7 @@
   changed_when: false
 
 - name: Label all other nodes with role=was
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   command: docker node update --label-add role=was {{ item }}
   loop: >-
@@ -193,17 +176,17 @@
       | reject('equalto', self_node_id_result.stdout | trim)
       | list
     }}
-  changed_when: true
+  register: was_label_out
+  changed_when: "'is up-to-date' not in was_label_out.stderr"
 
-# 9. 최종 클러스터 검증 상태 출력
 - name: Final cluster verification
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   become: true
   command: docker node ls
   register: final_node_ls
   changed_when: false
 
 - name: Print final cluster state
-  when: inventory_hostname == surviving_node_hostname
+  when: inventory_hostname == hostvars['localhost'].surviving_node_hostname
   debug:
     var: final_node_ls.stdout_lines
