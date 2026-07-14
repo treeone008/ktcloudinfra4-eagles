@@ -1,5 +1,4 @@
 ---
-# 1. S3에서 가장 최근 백업 파일 키를 찾는다 (LastModified 기준)
 - name: Find the most recent backup key in S3
   run_once: true
   delegate_to: localhost
@@ -32,8 +31,6 @@
   set_fact:
     restore_source_key: "{{ latest_key_result.stdout | trim }}"
 
-# 2. 파일명에서 호스트명을 역산한다
-#    형식: <prefix>/<hostname>-swarm-backup-<timestamp>.tar.gz
 - name: Parse target hostname from backup filename
   run_once: true
   delegate_to: localhost
@@ -62,7 +59,6 @@
       백업 파일명에서 얻은 호스트명({{ hostvars['localhost'].restore_target_hostname }})이
       swarm_managers 그룹에 없습니다. inventory/hosts.ini를 확인하세요.
 
-# 3. mgmt로 최신 백업 파일을 내려받고, 무결성부터 확인한다
 - name: Create local backup directory
   run_once: true
   delegate_to: localhost
@@ -100,7 +96,6 @@
       다운로드한 백업 파일이 손상되었습니다. 복구를 중단합니다.
       S3에 더 오래된 백업이 있는지 확인하세요.
 
-# 4. 복구 대상 노드(재생성되었다는 전제)에 restore
 - name: Restore swarm state on the recreated target node
   when: inventory_hostname == hostvars['localhost'].restore_target_hostname
   block:
@@ -114,9 +109,7 @@
         name: docker
         state: stopped
 
-    # README CRITICAL: dockerd가 완전히 죽은 뒤에 swarm 디렉터리를
-    # 건드려야 함. 재생성 직후라 대부분 이미 정지 상태겠지만,
-    # cloud-init이 docker를 자동 기동했을 가능성을 방어.
+    # 메모리 상의 프로세스에서 docker가 완전히 사라졌는지 확인
     - name: Wait until dockerd process fully exits (max 30s)
       become: true
       command: pgrep -x dockerd
@@ -141,8 +134,8 @@
         dest: "/tmp/restore-{{ inventory_hostname }}.tar.gz"
         mode: "0644"
 
-    # README: tar -xzvpf로 권한까지 그대로 복원. unarchive 모듈 대신
-    # 검증된 원본 명령을 그대로 사용.
+    # tar -xzvpf로 권한까지 그대로 복원
+    # 새 인스턴스 user 동일하므로 복원 전 파일 권한에 대한 인스턴스의 uid, gid가 동일
     - name: Extract backup archive with permissions preserved (tar -p)
       become: true
       command: >
@@ -151,8 +144,6 @@
       register: tar_restore_result
       changed_when: tar_restore_result.rc == 0
 
-    # README CRITICAL: 소유권/권한이 정확하지 않으면 dockerd가
-    # 부팅 시 바로 크래시합니다.
     - name: Reset ownership and permissions on restored swarm directory (CRITICAL)
       become: true
       file:
@@ -217,7 +208,6 @@
       debug:
         var: post_restore_node_ls.stdout_lines
 
-# 5. 나머지 매니저(재생성되었다는 전제)를 새 리더에 재조인
 - name: Rejoin the remaining recreated managers
   when: inventory_hostname != hostvars['localhost'].restore_target_hostname
   block:
@@ -255,11 +245,9 @@
       register: swarm_join_result
       changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
 
-# 5.5. 유령(중복) 노드 정리 — 재조인이 전부 끝난 뒤에 실행
-#      force-new-cluster 직후에는 예전 노드들의 상태가 "Down"이 아니라
-#      "Unknown"으로 찍혀서 상태 문자열로 걸러내는 방식이 타이밍에
-#      취약했습니다. 대신 재조인이 다 끝난 지금, "같은 호스트명이
-#      두 번 이상 나오면 Ready가 아닌 쪽을 지운다"는 기준으로 정리합니다.
+# 복구 직후에는 죽어버린 옛날 노드들의 상태가 Down 또는 Unreachable로 표시 되어야 함
+# 하지만 --force-new-cluster를 실행한 직후 아주 짧게 Unknown 상태가 됨
+# 따라서 로직을 Ready가 아닌 상태의 노드들만 강제 삭제
 - name: Find hostnames that appear more than once (leftover ghosts)
   when: inventory_hostname == hostvars['localhost'].restore_target_hostname
   become: true
@@ -293,11 +281,6 @@
   debug:
     var: post_cleanup_node_ls.stdout_lines
 
-# 6. 리더/WAS 역할 라벨 자동 부여
-#    Docker에 등록된 실제 노드명(OS 호스트명)이 Ansible 인벤토리 별칭과
-#    다를 수 있어(find-leader에서 겪은 것과 동일한 문제), 이름으로 지정하는
-#    대신 노드 ID만 사용합니다. ("self"는 docker node inspect에서는 되지만
-#    docker node update의 대상 인자로는 지원되지 않아 실제 ID로 변환해서 씀)
 - name: Get this node's own Docker node ID
   when: inventory_hostname == hostvars['localhost'].restore_target_hostname
   become: true
@@ -351,7 +334,6 @@
   loop_control:
     label: "{{ item.item }}"
 
-# 7. 최종 확인 (아무 노드에서나 한 번)
 - name: Final cluster verification
   run_once: true
   become: true

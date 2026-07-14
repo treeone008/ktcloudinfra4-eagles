@@ -1,0 +1,81 @@
+---
+# 다음과 같은 down_nodes 리스트를 webhook에서 받는다고 가정합니다.
+# {
+#  "down_nodes": [
+#    { "name": "node-02", "fixed_ip": "10.0.0.12" },
+#    { "name": "node-03", "fixed_ip": "10.0.0.13" }
+#  ]
+#}
+
+- name: Validate input from monitoring webhook
+  assert:
+    that:
+      - down_nodes is defined
+      - down_nodes | type_debug == 'list'
+      - down_nodes | length > 0
+    fail_msg: "장애 노드 리스트(down_nodes) 변수가 정의되지 않았거나 비어있습니다."
+  run_once: true
+
+- name: Remove failed node from Load Balancer Pool
+  openstack.cloud.lb_member:
+    cloud: mycloud
+    state: absent
+    name: "{{ down_node_hostname }}"
+    pool: "{{ weblb_pool_id }}"
+    address: "{{ down_node_fixed_ip }}"
+
+- name: Terminate the dead instance {{ down_node_hostname }}
+  openstack.cloud.server:
+    cloud: mycloud
+    state: absent
+    name: "{{ down_node_hostname }}"
+    wait: true
+
+- name: Ensure network port exists with identical Fixed IP
+  openstack.cloud.port:
+    cloud: mycloud
+    state: present
+    name: "{{ down_node_hostname }}-port"
+    network: "{{ webserver_network_id }}"
+    security_groups:
+      - web-sg
+    fixed_ips:
+      - subnet_id: "{{ webserver_subnet_id }}"
+        ip_address: "{{ down_node_fixed_ip }}"
+  register: manager_port
+
+- name: Re-create instance using the guaranteed Port
+  openstack.cloud.server:
+    cloud: mycloud
+    state: present
+    name: "{{ down_node_hostname }}"
+    image: "ubuntu"
+    flavor: "m1.small"
+    key_name: "openstack2"
+    nics:
+      - port-id: "{{ manager_port.port.id }}"
+    auto_ip: false
+    wait: true
+    timeout: 300
+
+- name: Register newborn instance into dynamic recovery group
+  add_host:
+    name: "{{ down_node_hostname }}"
+    ansible_host: "{{ down_node_fixed_ip }}"
+    groups:
+      - recovery_targets
+
+- name: Add newborn node back to OpenStack Load Balancer Pool
+  openstack.cloud.lb_member:
+    cloud: mycloud
+    state: present
+    name: "{{ down_node_hostname }}"
+    pool: "{{ weblb_pool_id }}"
+    address: "{{ down_node_fixed_ip }}"
+    protocol_port: 80
+    weight: 1
+
+- name: Wait for SSH connection to respond
+  wait_for_connection:
+    timeout: 300
+  delegate_to: "{{ down_node_hostname }}" # localhost에서 돌지 말고, 새 인스턴스로 SSH 찔러서 확인

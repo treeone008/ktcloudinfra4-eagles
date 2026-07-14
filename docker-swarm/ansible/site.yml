@@ -1,59 +1,87 @@
 ---
+- name: Provision OpenStack Instances & Handle Load Balancer Pool
+  hosts: localhost
+  gather_facts: false
+  tags: [swarm_recovery1, swarm_recovery2, swarm_recovery3]
+  tasks:
+    - name: Run provisioning and group dynamically
+      include_role:
+        name: swarm/recovery-provision
+      vars:
+        down_node_hostname: "{{ item.name }}"
+        down_node_fixed_ip: "{{ item.fixed_ip }}"
+      loop: "{{ down_nodes }}"
+
+- name: "[0단계] Common Configuration for All Nodes" # 건우님 코드 통합
+  hosts: "{{ 'recovery_targets' if 'recovery_targets' in groups else 'swarm_managers' }}"
+  gather_facts: false
+  become: true
+  tags: common #[swarm_setup, swarm_recovery1, swarm_recovery2, swarm_recovery3]
+  roles:
+    - role: common/update_cache
+    - role: common/upgrade_packages
+    - role: common/install_utilities
+    - role: common/setup_timezone
+    - role: common/sync_time
+    - role: common/ufw_settings
+
+- name: "[2단계-A] Infrastructure Metrics Agent (Node Exporter)" # 건우님 코드 통합
+  hosts: "{{ 'recovery_targets' if 'recovery_targets' in groups else 'swarm_managers' }}"
+  gather_facts: false
+  become: true
+  tags: [swarm_setup, swarm_recovery1, swarm_recovery2, swarm_recovery3]
+  roles:
+    - role: monitoring/node_exporter_install
+    - role: monitoring/node_exporter_service
+
 - name: Install Docker
-  hosts: swarm_managers
+  hosts: "{{ 'recovery_targets' if 'recovery_targets' in groups else 'swarm_managers' }}"
   become: true
   tags: [docker, swarm_setup, swarm_recovery3, swarm_recovery2, swarm_recovery1]
   roles:
     - role: swarm/docker
 
-- name: Init Swarm on leader
-  hosts: swarm-mg
+- name: Configure and Initialize Docker Swarm Cluster
+  hosts: swarm_managers
   become: true
   tags: swarm_setup
+  vars:
+    swarm_leader_node: "swarm-mg1"
   roles:
     - role: swarm/init
-
-- name: Join other managers
-  hosts: swarm-mg2,swarm-mg3
-  become: true
-  tags: [swarm_join, swarm_setup]
-  roles:
+      when: inventory_hostname == swarm_leader_node
     - role: swarm/join
-
-- name: Set node labels
-  hosts: swarm-mg
-  become: true
-  tags: swarm_setup
-  roles:
+      when: inventory_hostname != swarm_leader_node
     - role: swarm/labels
+      when: inventory_hostname == swarm_leader_node
+
+- name: Discover current swarm leader
+  hosts: swarm_managers
+  gather_facts: false
+  tags: [swarm_leader, swarm_setup, swarm_update, swarm_rollback, swarm_backup, swarm_recovery1, swarm_scaleout, swarm_scalein]
+  roles:
+    - role: swarm/find-leader
 
 - name: Deploy stack
-  hosts: swarm-mg
+  hosts: current_swarm_leader
   become: true
   tags: [swarm_deploy, swarm_setup]
   roles:
     - role: swarm/deploy
 
 - name: Rolling update
-  hosts: swarm-mg
+  hosts: current_swarm_leader
   become: true
   tags: swarm_update
   roles:
     - role: swarm/update
 
 - name: Rollback
-  hosts: swarm-mg
+  hosts: current_swarm_leader
   become: true
   tags: swarm_rollback
   roles:
     - role: swarm/rollback
-
-- name: Discover current swarm leader
-  hosts: swarm_managers
-  gather_facts: false
-  tags: [swarm_leader, swarm_backup, swarm_recovery1, swarm_scaleout, swarm_scalein]
-  roles:
-    - role: swarm/find-leader
 
 - name: Backup swarm state and upload to S3
   hosts: swarm_managers
@@ -88,6 +116,7 @@
   gather_facts: false
   tags: [swarm_scaleout]
   roles:
+    - role: swarm/provision
     - role: swarm/scaleout
 
 - name: Scale in - remove a dead worker and decrease replicas

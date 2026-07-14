@@ -1,19 +1,22 @@
 ---
-# docker node ls로 호스트명을 파싱해서 인벤토리와 매칭하는 대신,
-# 각 노드가 "docker node inspect self"로 스스로 리더인지 직접 확인합니다.
-# (Docker가 보고하는 OS 호스트명과 Ansible 인벤토리 별칭이 다를 수 있어,
-#  문자열 매칭 방식은 깨지기 쉽습니다. self를 쓰면 그 문제 자체가 없어집니다.)
 - name: Check if this node is the current swarm leader
   become: true
   command: >
     docker node inspect self --format '{% raw %}{{.ManagerStatus.Leader}}{% endraw %}'
-  register: is_leader_result
+  register: is_leader_result # 만약 false이면 assert를 만나기 전까지 skip되게 설계함
   changed_when: false
-  ignore_errors: true
+  ignore_errors: true # 에러가 나도 실행 중단 안됨
 
 - name: Mark this host as leader if true
   set_fact:
     is_swarm_leader: "{{ (is_leader_result.stdout | default('') | trim) == 'true' }}"
+
+- name: Add leader host to dynamic group
+  add_host:
+    name: "{{ inventory_hostname }}"
+    groups: current_swarm_leader
+  when: is_swarm_leader
+  changed_when: false
 
 - name: Record leader info on control node
   set_fact:
@@ -26,7 +29,7 @@
 - name: Verify a leader was found
   run_once: true
   delegate_to: localhost
-  assert:
+  assert: # 여기서 진짜 검증
     that:
       - hostvars['localhost'].swarm_leader_ip is defined
     fail_msg: >-
