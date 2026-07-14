@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>04 프로젝트 수행 경과 - OpenStack</title>
+<style>
+  :root {
+    --fg: #111;
+    --muted: #444;
+    --line: #ddd;
+    --accent: #1a1a1a;
+    --bg: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #e8e8e8;
+    color: var(--fg);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    line-height: 1.45;
+  }
+  .deck {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 28px;
+    align-items: center;
+  }
+  .slide {
+    width: 1280px;
+    height: 720px;
+    background: var(--bg);
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    padding: 48px 56px 40px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    page-break-after: always;
+  }
+  .slide h1 {
+    font-size: 28px;
+    font-weight: 700;
+    border-bottom: 2px solid #222;
+    padding-bottom: 12px;
+    margin-bottom: 22px;
+  }
+  .slide h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 14px 0 8px;
+  }
+  .slide p, .slide li {
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .slide ul { padding-left: 18px; }
+  .slide li { margin: 4px 0; }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    flex: 1;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .box {
+    border: 1px solid var(--line);
+    padding: 14px 16px;
+    background: #fafafa;
+  }
+  .box strong { color: var(--fg); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 6px;
+  }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f3f3f3; font-weight: 700; color: #111; }
+  .mono {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+  }
+  .note {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 13px;
+    color: #666;
+    border-top: 1px dashed #ccc;
+  }
+  .img-slot {
+    border: 1px dashed #999;
+    background: #f7f7f7;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #555;
+    font-size: 13px;
+    padding: 12px;
+  }
+  .img-slot img {
+    max-width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+  }
+  .badge {
+    display: inline-block;
+    border: 1px solid #333;
+    padding: 2px 8px;
+    font-size: 12px;
+    margin-right: 6px;
+  }
+  .footer {
+    position: absolute;
+    right: 56px;
+    bottom: 22px;
+    font-size: 12px;
+    color: #888;
+  }
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    width: 100%;
+    background: #222;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .toolbar button {
+    background: #fff;
+    border: 0;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .deck { padding: 0; gap: 0; }
+    .slide {
+      border: none;
+      box-shadow: none;
+      width: 100%;
+      height: 100vh;
+      margin: 0;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <strong>04 OpenStack · 5장</strong>
+    <span>← → 또는 클릭으로 이동 · Ctrl+P → PDF/인쇄 · 텍스트 직접 수정 가능</span>
+    <button type="button" onclick="window.print()">인쇄 / PDF</button>
+  </div>
+
+  <div class="deck" id="deck">
+
+    <!-- ========== SLIDE 1 ========== -->
+    <section class="slide" id="s1">
+      <h1>04 프로젝트 수행 경과 - OpenStack (1/5) 개요</h1>
+      <div class="grid-2">
+        <div>
+          <h2>■ 목적</h2>
+          <p>VMware 환경에서 Kolla-Ansible 기반 OpenStack(IaaS) 멀티노드 설계·구축·검증</p>
+
+          <h2>■ 환경</h2>
+          <ul>
+            <li>플랫폼: VMware + Ubuntu 24.04 + Kolla-Ansible 2025.1</li>
+            <li>기간: 2026-06 ~ 2026-07</li>
+            <li>검증일: 2026-07-06</li>
+          </ul>
+
+          <h2>■ 구성 요약</h2>
+          <ul>
+            <li>인프라 노드: <strong>7대</strong> (mgmt / control / network / storage / compute×3)</li>
+            <li>Tenant VM: <strong>9대</strong> (swarm / db / proxy / lb)</li>
+            <li>검증: <strong>server list 9/9 ACTIVE</strong></li>
+          </ul>
+
+          <h2>■ 노드 IP</h2>
+          <p class="mono">
+            mgmt .200 · control .100 · network .101 · storage .102<br />
+            compute .103 / .104 / .106 · VIP .105
+          </p>
+        </div>
+        <div>
+          <h2>■ 증거 캡처</h2>
+          <div class="img-slot">
+            <div>
+              <strong>01-vmware-library-7nodes.png</strong><br /><br />
+              VMware 7노드 전원 ON<br />
+              <span class="mono" style="font-size:11px;word-break:break-all;">
+                images/captures/01-vmware-library-7nodes.png
+              </span>
+            </div>
+          </div>
+          <p class="note">Google Slides: 이 자리 이미지 삽입 → 위 파일명으로 GitHub captures에서 가져오기</p>
+        </div>
+      </div>
+      <div class="footer">김현도 · OpenStack IaaS</div>
+    </section>
+
+    <!-- ========== SLIDE 2 ========== -->
+    <section class="slide" id="s2">
+      <h1>04 프로젝트 수행 경과 - OpenStack (2/5) 수행 내용</h1>
+      <div class="grid-2">
+        <div>
+          <h2>■ 주요 수행 항목</h2>
+          <table>
+            <thead>
+              <tr><th style="width:22%">구분</th><th>내용</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>인프라</strong></td>
+                <td>control / network / storage / compute 역할 분리<br />Kolla-Ansible로 OpenStack 서비스 배포</td>
+              </tr>
+              <tr>
+                <td><strong>네트워크</strong></td>
+                <td>public1(flat) + project-public / private-net<br />project-router + Floating IP</td>
+              </tr>
+              <tr>
+                <td><strong>컴퓨트·스토리지</strong></td>
+                <td>compute 3대 스케줄링 · anti-affinity(db/swarm)<br />Cinder 볼륨 (db01/db02-data)</td>
+              </tr>
+              <tr>
+                <td><strong>접속</strong></td>
+                <td>FIP .219 (swarm-mg), .243<br />mgmt → control ProxyJump SSH 설계</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <h2>■ 네트워크 접근 원칙</h2>
+          <div class="box" style="margin-bottom:14px;">
+            <p><span class="badge">OK</span> VM → tenant net → router → public1 + FIP</p>
+            <p style="margin-top:8px;"><span class="badge">NG</span> public1에 tenant VM 직접 연결</p>
+          </div>
+          <h2>■ 참고 캡처 (선택)</h2>
+          <div class="img-slot" style="min-height:160px;">
+            <div>
+              <strong>04-horizon-network-topology.png</strong><br />
+              Network Topology · router + tenant VM
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">김현도 · OpenStack IaaS</div>
+    </section>
+
+    <!-- ========== SLIDE 3 ========== -->
+    <section class="slide" id="s3">
+      <h1>04 프로젝트 수행 경과 - OpenStack (3/5) 검증 결과</h1>
+      <div class="grid-2">
+        <div>
+          <h2>■ 검증 결과 (2026-07-06)</h2>
+          <table>
+            <thead>
+              <tr><th>항목</th><th>결과</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>compute service</td><td>3대 up</td></tr>
+              <tr><td>server list</td><td><strong>9/9 ACTIVE</strong></td></tr>
+              <tr><td>network agent</td><td>L3 / DHCP / OVS UP</td></tr>
+              <tr><td>Floating IP</td><td>ping / SSH OK</td></tr>
+              <tr><td>Cinder volume</td><td>db 볼륨 in-use</td></tr>
+              <tr><td>server group</td><td>anti-affinity 적용</td></tr>
+            </tbody>
+          </table>
+          <p class="note" style="border:0;margin-top:16px;">
+            <strong>한 줄 요약:</strong> 멀티노드 OpenStack 위에 tenant 9대가 정상 ACTIVE로 기동됨
+          </p>
+        </div>
+        <div>
+          <h2>■ 핵심 증거</h2>
+          <div class="img-slot" style="min-height:200px;margin-bottom:12px;">
+            <div>
+              <strong>06-cli-server-list-10active.png</strong><br />
+              openstack server list · 9/9 ACTIVE (최종)<br />
+              <em>(가장 크게 배치 · 파일명 유지)</em>
+            </div>
+          </div>
+          <div class="img-slot" style="min-height:120px;">
+            <div>
+              <strong>05-cli-compute-service-list.png</strong><br />
+              compute service list · compute 3대 up
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">김현도 · OpenStack IaaS</div>
+    </section>
+
+    <!-- ========== SLIDE 4 ========== -->
+    <section class="slide" id="s4">
+      <h1>04 프로젝트 수행 경과 - OpenStack (4/5) 이슈 및 해결</h1>
+      <h2>■ 원칙</h2>
+      <p style="margin-bottom:12px;">안 되면 <strong>agent list → 부팅 순서 → SG/키</strong> 순으로 확인 (리소스 설정부터 의심하지 않음)</p>
+
+      <h2>■ 주요 이슈</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:22%">증상</th>
+            <th style="width:34%">원인</th>
+            <th>해결</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>PortBindingFailed</td>
+            <td>public1에 VM 직접 연결</td>
+            <td>tenant net + router + FIP</td>
+          </tr>
+          <tr>
+            <td>compute RPC 타임아웃</td>
+            <td>compute Full Clone → host 충돌</td>
+            <td>클론 금지 → 신규 VM 제작</td>
+          </tr>
+          <tr>
+            <td>No valid host</td>
+            <td>Placement 디스크/RAM 부족</td>
+            <td>LVM 확장 / flavor 조정</td>
+          </tr>
+          <tr>
+            <td>재부팅 후 SHUTOFF</td>
+            <td>자동 기동 미설정</td>
+            <td>server start + nova 설정</td>
+          </tr>
+          <tr>
+            <td>db VM ERROR</td>
+            <td>storage 늦게 기동</td>
+            <td>storage 먼저 → hard reboot</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <div class="box">
+          <h2 style="margin-top:0;">■ 하지 말 것</h2>
+          <ul>
+            <li>compute Full Clone ❌ → 신규 VM 제작 ✅</li>
+            <li>VM을 public1에 직접 ❌ → tenant net + FIP ✅</li>
+            <li>storage 없이 db 기동 ❌ → control→network→storage→compute ✅</li>
+          </ul>
+        </div>
+        <div class="img-slot" style="min-height:110px;">
+          <div>
+            <strong>(선택) 08-cli-network-agent-list.png</strong><br />
+            network agent list · L3/DHCP/OVS UP
+          </div>
+        </div>
+      </div>
+      <div class="footer">김현도 · OpenStack IaaS · 상세: 09-트러블슈팅-종합-가이드</div>
+    </section>
+
+    <!-- ========== SLIDE 5 ========== -->
+    <section class="slide" id="s5">
+      <h1>04 프로젝트 수행 경과 - OpenStack (5/5) 결과 및 연동</h1>
+      <div class="grid-2">
+        <div>
+          <h2>■ 수행 결과</h2>
+          <ul>
+            <li>OpenStack IaaS 멀티노드 기반 구축 <strong>완료</strong></li>
+            <li>tenant 9대 ACTIVE / FIP·Cinder·anti-affinity 검증 완료</li>
+            <li>산출물: 08 인수인계 · 캡처 13장 · 09 트러블슈팅 가이드</li>
+          </ul>
+
+          <h2>■ 팀 연동</h2>
+          <table>
+            <thead>
+              <tr><th></th><th>본 구축</th><th>강사 실시연</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>OpenStack</td><td>멀티노드 7+tenant</td><td>올인원(AIO)</td></tr>
+              <tr><td>이후 팀</td><td>Ansible / Swarm / DB / Monitoring</td><td>Heat·Swarm 시연 별도</td></tr>
+            </tbody>
+          </table>
+
+          <h2>■ 향후</h2>
+          <ul>
+            <li>재부팅 후 복구 체크리스트 운영</li>
+            <li>resume_guests_state_on_host_boot 적용 검토</li>
+            <li>mgmt ProxyJump 접속 절차 문서화 유지</li>
+          </ul>
+        </div>
+        <div>
+          <h2>■ 마무리 증거</h2>
+          <div class="img-slot" style="min-height:140px;margin-bottom:12px;">
+            <div>
+              <strong>09-cli-server-group-list.png</strong><br />
+              anti-affinity server group
+            </div>
+          </div>
+          <div class="img-slot" style="min-height:140px;">
+            <div>
+              <strong>10-cli-floating-ip-list.png</strong><br />
+              또는 <strong>11-cli-volume-and-service.png</strong><br />
+              FIP / Cinder
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">김현도 · OpenStack IaaS</div>
+    </section>
+
+  </div>
+
+  <script>
+    // 키보드로 슬라이드 점프 (선택)
+    const slides = [...document.querySelectorAll('.slide')];
+    let idx = 0;
+    function go(n) {
+      idx = Math.max(0, Math.min(slides.length - 1, n));
+      slides[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') go(idx + 1);
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(idx - 1);
+      if (e.key === 'Home') go(0);
+      if (e.key === 'End') go(slides.length - 1);
+    });
+  </script>
+</body>
+</html>

@@ -1,15 +1,15 @@
 # 발표자료 — OpenStack 멀티노드 IaaS 구축 (김현도)
 
 > **목적:** VMware + Kolla-Ansible 기반 **멀티노드 OpenStack** 환경을 설계·구축·검증한 결과를 정리한다.  
-> **검증 일시:** 2026-07-06 · tenant VM **10/10 ACTIVE**  
-> **캡처:** `images/captures/` — Notion·발표 슬라이드용 (**13장**, 2026-07-06 촬영)
+> **검증 일시:** 2026-07-06 · **최종 구성(2026-07-14):** tenant VM **9/9 ACTIVE** (`automation-01` 삭제)  
+> **캡처:** `images/captures/` — Notion·발표 슬라이드용 (**13장**, 2026-07-06 촬영 · server list는 9대 기준으로 재촬영 권장)
 > 
 ## 1. 한 줄 요약
 
 | 항목 | 내용 |
 |------|------|
 | 플랫폼 | VMware Workstation Pro + Ubuntu 24.04 + Kolla-Ansible 2025.1 |
-| 구성 | 인프라 **7노드** (mgmt + control / network / storage / compute×3) + tenant **10대** |
+| 구성 | 인프라 **7노드** (mgmt + control / network / storage / compute×3) + tenant **9대** |
 | 핵심 | 멀티 compute 분산, anti-affinity, public/private 이중망, FIP, Cinder, **mgmt 설계** |
 | 검증 | Horizon + OpenStack CLI 캡처 **13장** (`images/captures/`) |
 | 실시연 | 강사 PC **mgmt+올인원 2VM**, Swarm **원노드** (본 문서는 **구축 증명**용) |
@@ -28,10 +28,10 @@ VMware Workstation Pro
 ├─ compute-node-02  (.104)  Nova Compute
 └─ compute-node-03  (.106)  Nova Compute
 
-Tenant (OpenStack 인스턴스 10대)
+Tenant (OpenStack 인스턴스 9대)
 ├─ compute-01: swarm-mg, db01, db_proxy-01, lb-01
 ├─ compute-02: swarm-mg2, db02, db_proxy-02, lb-02
-└─ compute-03: swarm-mg3, automation-01
+└─ compute-03: swarm-mg3
 ```
 
 ![VMware 라이브러리 — 7노드 전원 ON (mgmt 포함)](images/captures/01-vmware-library-7nodes.png)
@@ -49,11 +49,12 @@ Tenant (OpenStack 인스턴스 10대)
 | compute×3 | .103 / .104 / .106 | Nova Compute |
 | Horizon VIP | 172.16.8.105 | `http://172.16.8.105` |
 
-**Horizon 쿼터 (2026-07-06 실측):** Instances **10/10 (100%)** · VCPU 10/20 · RAM 12GB/50GB · Volume 2/10 · FIP 2/50
+**Horizon 쿼터 (최종 구성):** Instances **9** · VCPU/RAM·Volume·FIP는 환경에 따라 변동  
+(2026-07-06 당시 캡처 `02`/`03`은 10대 시점일 수 있음 → 발표 시 9대 CLI 캡처 병행)
 
 ![Horizon Overview — Limit Summary](images/captures/02-horizon-overview-quota.png)
 
-![Horizon Usage Summary — 10 ACTIVE, RAM 12GB](images/captures/03-horizon-usage-summary.png)
+![Horizon Usage Summary](images/captures/03-horizon-usage-summary.png)
 
 ---
 
@@ -76,7 +77,7 @@ Tenant (OpenStack 인스턴스 10대)
 
 ---
 
-## 5. Tenant VM 목록 (검증 완료)
+## 5. Tenant VM 목록 (최종)
 
 | 이름 | Fixed IP | FIP | Flavor | 상태 |
 |------|----------|-----|--------|:----:|
@@ -87,9 +88,10 @@ Tenant (OpenStack 인스턴스 10대)
 | db02 | .101.32 | — | m1.micro | ACTIVE |
 | db_proxy-01/02 | .101.40/41 | — | m1.micro | ACTIVE |
 | lb-01/02 | .100.50/51 | — | m1.micro | ACTIVE |
-| automation-01 | .100.60 | — | m1.micro | ACTIVE |
 
-![openstack server list — 10/10 ACTIVE (핵심 증명)](images/captures/06-cli-server-list-10active.png)
+> `automation-01`(.100.60) — **2026-07-14 삭제** (최종 구성 제외)
+
+![openstack server list — 9/9 ACTIVE (핵심 증명)](images/captures/06-cli-server-list-10active.png)
 
 ---
 
@@ -97,8 +99,8 @@ Tenant (OpenStack 인스턴스 10대)
 
 ```
 compute-01 (.103)     compute-02 (.104)     compute-03 (.106)
-├─ swarm-mg           ├─ swarm-mg2          ├─ swarm-mg3
-├─ db01               ├─ db02                └─ automation-01
+├─ swarm-mg           ├─ swarm-mg2          └─ swarm-mg3
+├─ db01               ├─ db02
 ├─ db_proxy-01        ├─ db_proxy-02
 └─ lb-01              └─ lb-02
 ```
@@ -191,7 +193,7 @@ openstack network agent list
 3. Image·Flavor·SG·Keypair
 4. compute-02 신규 제작 (클론 금지)
 5. compute-03 추가 → swarm 3분산
-6. tenant 10대 · IP표·배치 준수
+6. tenant **9대** · IP표·배치 준수 (`automation-01` 최종 제외)
 7. anti-affinity + Cinder db 볼륨
 8. FIP 2개 · mgmt-01 + ProxyJump 설계
 
@@ -214,7 +216,7 @@ openstack network agent list
 |:-:|------|:----:|
 | 1 | VMware 7노드 ON | ✅ |
 | 2 | compute service list | ✅ |
-| 3 | server list 10 ACTIVE | ✅ |
+| 3 | server list **9 ACTIVE** (최종) | ✅ |
 | 4 | volume list in-use | ✅ |
 | 5 | floating ip list | ✅ |
 | 6 | network agent list | ✅ |
@@ -237,4 +239,4 @@ openstack network agent list
 ---
 
 **작성:** 김현도  
-**최종 갱신:** 2026-07-06 (캡처 13장 배치 완료)
+**최종 갱신:** 2026-07-14 (`automation-01` 삭제 · tenant 9대)
