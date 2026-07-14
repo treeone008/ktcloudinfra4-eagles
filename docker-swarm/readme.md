@@ -42,7 +42,7 @@ ansible-playbook -i hosts.ini site.yml --tags swarm_setup
 ```
 #### 실행 결과
 
-!image.png
+![swarm_setup 결과](https://github.com/user-attachments/assets/3819cc6a-c690-47d6-b846-8443a5fb139d)
 
 #### stack.yml 핵심 설정
 
@@ -76,7 +76,7 @@ ansible-playbook -i hosts.ini site.yml --tags swarm_update
 ```
 #### 실행 결과
 
-!image.png
+![swarm_update 결과](https://github.com/user-attachments/assets/7cc51507-41dd-4f7d-bd7a-e865e2fd87f7)
 
 #### 실행 흐름 — Rollback (--tags swarm_rollback)
 
@@ -92,7 +92,7 @@ ansible-playbook -i hosts.ini site.yml --tags swarm_rollback
 ```
 #### 실행 결과
 
-!image.png
+![swarm_rollback 결과](https://github.com/user-attachments/assets/c33b941c-672b-4a08-b1c9-ed315cf83d55)
 
 #### Blue/Green 이미지 전환
 
@@ -145,7 +145,7 @@ ansible-playbook -i hosts.ini site.yml --tags swarm_backup
 ```
 #### 실행 결과
 
-!image.png
+<img width="418" height="199" alt="image" src="https://github.com/user-attachments/assets/5866caab-b742-40cc-8911-76c2cb67e6fe" />
 
 #### 핵심 설계 포인트
 
@@ -186,9 +186,13 @@ ansible-playbook -i hosts.ini site.yml \
   --tags swarm_recovery1 \
   -e '{"down_nodes": [{"name": "swarm-mg2", "fixed_ip": "192.168.1.21"}]}'
 ```
+**Pending**: 생존 매니저 수 = 2
+**Firing**: 90초 연속 유지
+
+매니저 인스턴스 1대를 shutdown 시킨 뒤 매니저가 복구되는지 모니터링을 통해 확인합니다.
 #### 실행 결과
 
-!image.png
+<img width="374" height="311" alt="image" src="https://github.com/user-attachments/assets/e8c54f3f-2921-4295-9fd0-7182b5c80662" />
 
 #### 실행 흐름 — 2대 다운, 쿼럼 상실 (--tags swarm_recovery2)
 
@@ -208,9 +212,12 @@ ansible-playbook -i hosts.ini site.yml \
   --tags swarm_recovery2 \
   -e '{"down_nodes": [{"name": "swarm-mg2", "fixed_ip": "192.168.1.21"}, {"name": "swarm-mg3", "fixed_ip": "192.168.1.22"}]}'
 ```
+**Pending**: 생존 매니저 수 = 1
+**Firing**: 90초 연속 유지
+
 #### 실행 결과
 
-!image.png
+<img width="371" height="295" alt="image" src="https://github.com/user-attachments/assets/dcda51a9-8513-4253-a78c-68e5f25688a8" />
 
 #### 실행 흐름 — 3대 다운, 전멸 (--tags swarm_recovery3)
 
@@ -238,9 +245,12 @@ ansible-playbook -i hosts.ini site.yml \
   --tags swarm_recovery3 \
   -e '{"down_nodes": [{"name": "swarm-mg", "fixed_ip": "192.168.1.20"}, {"name": "swarm-mg2", "fixed_ip": "192.168.1.21"}, {"name": "swarm-mg3", "fixed_ip": "192.168.1.22"}]}'
 ```
+**Pending**: 생존 매니저 수 = 0
+**Firing**: 90초 연속 유지
+
 #### 실행 결과
 
-!image.png
+<img width="377" height="317" alt="image" src="https://github.com/user-attachments/assets/37cae254-f566-4e7c-a6ef-c075a5c59f2a" />
 
 #### 핵심 설계 포인트
 
@@ -286,11 +296,12 @@ Step 11) 리더로 복사 후 재배포
 ```bin
 ansible-playbook -i hosts.ini site.yml --tags swarm_scaleout
 ```
+**pending**: 매니저 3대의 평균 cpu 80% 이상
+**Firing**: 2분 연속 지속
+
 #### 실행 결과
 
-!image.png
-
-!image.png
+<img width="380" height="260" alt="image" src="https://github.com/user-attachments/assets/27d60a7f-c9a4-4233-a4e7-b11ed48e7695" />
 
 #### Scale in 흐름
 
@@ -314,16 +325,18 @@ Step 8) 재배포
 ```bin
 ansible-playbook -i hosts.ini site.yml --tags swarm_scalein
 ```
+**Pending**: 매니저 3대의 평균 cpu 40% 미만
+**Firing**: 3분 연속 지속 
+
 #### 실행 결과
 
-!image.png
+<img width="377" height="237" alt="image" src="https://github.com/user-attachments/assets/c2bb6600-c842-48c1-889f-012866b0a4cd" />
 
 #### 핵심 설계 포인트
 
 - IP와 이름을 워커 번호로 자동 매핑
 - 사람 개입 없이 리더가 자동으로 대상 워커 판별
 - 리소스 정리를 실제 존재 여부 순서대로 진행 (인스턴스 생존 확인 후 join / 삭제 확인 후 LB·스웜 정리)
-
 ---
 
 ### 6. Docker Swarm — 모니터링 & 자동 복구/스케일링 (Prometheus + Alertmanager + Webhook)
